@@ -1,5 +1,5 @@
 (function () {
-  var I = 'assets/img/';
+  var I = '';
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var $ = function (id) { return document.getElementById(id); };
 
@@ -90,19 +90,7 @@
     renderFilters(); renderProducts();
   }
 
-  /* ---------- VIDEOS ---------- */
   var S = window.SITE || {};
-  var vw = $('videos');
-  if (vw) {
-    if (S.film && S.film.src) {
-      $('film').innerHTML = '<video controls preload="none" playsinline poster="' + esc(S.film.poster) + '" aria-label="' + esc(S.film.title) + '"><source src="' + esc(S.film.src) + '" type="video/mp4"></video>';
-    }
-    var vids = S.videos || [];
-    $('reels').innerHTML = vids.map(function (v) {
-      return '<figure style="margin:0;display:flex;flex-direction:column;gap:10px"><video controls preload="none" playsinline poster="' + esc(v.poster) + '"><source src="' + esc(v.src) + '" type="video/mp4"></video><figcaption style="font-weight:700;font-size:19px">' + esc(v.title) + '</figcaption></figure>';
-    }).join('');
-    if (!vids.length && !(S.film && S.film.src)) vw.style.display = 'none';
-  }
 
   /* ---------- STORES ---------- */
   var parseCSV = function (t) {
@@ -152,7 +140,7 @@
   };
   if (list) {
     search.addEventListener('input', renderStores);
-    var local = function () { return fetch('data/stores.csv', { cache: 'no-cache' }).then(function (r) { return r.text(); }); };
+    var local = function () { return fetch('stores.csv', { cache: 'no-cache' }).then(function (r) { return r.text(); }); };
     (S.storesCsvUrl ? fetch(S.storesCsvUrl).then(function (r) { if (!r.ok) throw 0; return r.text(); }).catch(local) : local())
       .then(loadStores).catch(function () { $('store-count').textContent = ''; });
   }

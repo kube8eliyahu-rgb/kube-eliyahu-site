@@ -1,12 +1,12 @@
-@font-face{font-family:'Reissfeder';src:url(../assets/fonts/reiss-reg.woff2) format('woff2');font-weight:400;font-display:swap}
-@font-face{font-family:'Reissfeder';src:url(../assets/fonts/reiss-bold.woff2) format('woff2');font-weight:700;font-display:swap}
-@font-face{font-family:'Hibuk';src:url(../assets/fonts/hibuk.woff2) format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Reissfeder';src:url(reiss-reg.woff2) format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Reissfeder';src:url(reiss-bold.woff2) format('woff2');font-weight:700;font-display:swap}
+@font-face{font-family:'Hibuk';src:url(hibuk.woff2) format('woff2');font-weight:400;font-display:swap}
 html{scroll-behavior:smooth}
 body{margin:0;background:#FBF8E4}
 img{max-width:100%}
 a{color:#FBF8E4}a:hover{color:#F59C7C}
 .page-light a{color:#0F3233}.page-light a:hover{color:#1E6B50}
-.prod-row::-webkit-scrollbar,.rec-row::-webkit-scrollbar,.nav::-webkit-scrollbar,.reel-row::-webkit-scrollbar{display:none}
+.prod-row::-webkit-scrollbar,.rec-row::-webkit-scrollbar,.nav::-webkit-scrollbar{display:none}
 button,input,select,textarea{font-family:inherit}
 :focus-visible{outline:3px solid #F59C7C;outline-offset:2px}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -14,9 +14,6 @@ button,input,select,textarea{font-family:inherit}
 .slide{transition:opacity 1.8s cubic-bezier(.45,0,.25,1),filter 1.8s cubic-bezier(.45,0,.25,1)}
 .slide .dish{transition:transform 5s cubic-bezier(.25,.1,.25,1)}
 .slide .pack{transition:transform 2.2s cubic-bezier(.25,.1,.25,1)}
-.reel-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px}
-.reel-row video{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:18px;background:#143F40;display:block}
-.film video{width:100%;aspect-ratio:16/9;border-radius:22px;background:#143F40;display:block}
 @media (prefers-reduced-motion: reduce){.slide,.slide .dish,.slide .pack{transition:none!important}html{scroll-behavior:auto}}
 
 @media (max-width: 640px){
@@ -47,8 +44,8 @@ button,input,select,textarea{font-family:inherit}
 #top + section span:first-child{font-size:24px!important}
 #top + section span + span{font-size:15px!important}
 #products{padding:44px 16px 20px!important;gap:18px!important}
-#products h2,#recipes h2,#where h2,#videos h2{font-size:36px!important}
-#products p,#recipes > div:first-child p,#videos > div:first-child p{font-size:24px!important}
+#products h2,#recipes h2,#where h2{font-size:36px!important}
+#products p,#recipes > div:first-child p{font-size:24px!important}
 .prod-row{display:flex!important;overflow-x:auto;scroll-snap-type:x mandatory;gap:14px!important;margin:0 -16px;padding:4px 16px 14px;scrollbar-width:none}
 .prod-row article{flex:0 0 66%;scroll-snap-align:center;padding:14px 12px 18px!important;gap:8px!important;box-sizing:border-box}
 .prod-row article > div:first-child{height:210px!important}
@@ -59,9 +56,6 @@ button,input,select,textarea{font-family:inherit}
 .story-in img[alt]{height:300px!important}
 .story-in > div:last-child > p:first-child{font-size:27px!important}
 .story-in h2{font-size:32px!important}
-#videos{padding:8px 16px 44px!important;gap:18px!important}
-.reel-row{display:flex!important;overflow-x:auto;scroll-snap-type:x mandatory;gap:14px!important;margin:0 -16px;padding:4px 16px 12px;scrollbar-width:none}
-.reel-row > figure{flex:0 0 62%;scroll-snap-align:center}
 #recipes{padding:8px 16px 44px!important;gap:18px!important}
 .rec-row{display:flex!important;overflow-x:auto;scroll-snap-type:x mandatory;gap:14px!important;margin:0 -16px;padding:4px 16px 12px;scrollbar-width:none}
 .rec-row > a{flex:0 0 74%;scroll-snap-align:center}
