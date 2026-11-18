@@ -8,6 +8,13 @@ window.SITE = {
   // רשימת החנויות:
   // אם מפרסמים גיליון Google Sheets כ-CSV, מדביקים כאן את הקישור והאתר יקרא ממנו.
   // אם ריק – האתר קורא מהקובץ stores.csv
-  storesCsvUrl: ''
+  storesCsvUrl: '',
+
+  // רשתות חברתיות (משאירים ריק כדי להסתיר כפתור)
+  social: {
+    instagram: 'https://www.instagram.com/kube_eliyahu',
+    tiktok: 'https://www.tiktok.com/@kube_eliyahu',
+    facebook: 'https://www.facebook.com/profile.php?id=100075824275094'
+  }
 
 };
