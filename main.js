@@ -55,18 +55,19 @@
     { id: 'arancini', kind: 'fry', isNew: 1, name: 'ארנצ׳יני סיסקה', tag: 'לטיגון', fill: 'במילוי בשר מפורק', color: '#F7AA45', specs: 'טיגון עד השחמה · 800 גרם' }
   ];
   var flipIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"></path><path d="M3 21v-5h5"></path></svg>';
+  var tint = function (h) { var a = [parseInt(h.substr(1, 2), 16), parseInt(h.substr(3, 2), 16), parseInt(h.substr(5, 2), 16)], b = [255, 252, 238]; return 'rgb(' + a.map(function (v, i) { return Math.round(v * 0.24 + b[i] * 0.76); }).join(',') + ')'; };
   var grid = $('prod-grid'), filters = $('filters'), flt = 'all';
   var renderProducts = function () {
     grid.innerHTML = LIST.filter(function (p) { return flt === 'all' || (flt === 'soup' ? (p.kind === 'soup' || p.kind === 'cook') : p.kind === flt); }).map(function (p) {
-      return '<article data-id="' + p.id + '" style="background:#F2EDD3;border-radius:24px;padding:22px 18px 24px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;border-top:8px solid ' + p.color + '">' +
+      return '<article class="pcard" data-id="' + p.id + '" style="background:' + tint(p.color) + ';border-radius:24px;padding:22px 18px 24px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;border-top:8px solid ' + p.color + '">' +
         '<div style="height:300px;width:100%;display:flex;align-items:center;justify-content:center"><img src="' + I + 'pack-' + p.id + '.webp" alt="אריזת ' + p.name + '" loading="lazy" style="max-width:100%;max-height:300px;width:auto;height:auto;filter:drop-shadow(0 16px 18px rgba(15,50,51,.28))"></div>' +
-        (p.back ? '<button type="button" class="flip" aria-pressed="false" style="min-height:44px;padding:8px 18px;border-radius:999px;border:2px solid #143F40;background:transparent;color:#143F40;font-weight:700;font-size:15px;cursor:pointer;display:inline-flex;align-items:center;gap:8px">' + flipIcon + '<span>הפכו את האריזה</span></button>' : '') +
+        (p.back ? '<button type="button" class="flip" aria-pressed="false" style="min-height:44px;padding:8px 18px;border-radius:999px;border:2px solid #005251;background:transparent;color:#005251;font-weight:700;font-size:15px;cursor:pointer;display:inline-flex;align-items:center;gap:8px">' + flipIcon + '<span>הפכו את האריזה</span></button>' : '') +
         (p.isNew ? '<span style="min-height:44px;display:inline-flex;align-items:center;font-family:Hibuk,cursive;font-size:24px;color:#B4532F">חדש בסדרה!</span>' : '') +
         '<h3 style="margin:4px 0 0;font-weight:700;font-size:30px;line-height:1">' + p.name + '</h3>' +
-        '<span style="background:' + p.color + ';color:#0F3233;font-weight:700;font-size:17px;padding:2px 16px;border-radius:6px">' + p.tag + '</span>' +
-        '<span style="font-family:Hibuk,cursive;font-size:24px;color:#1E6B50">' + p.fill + '</span>' +
-        '<span style="font-size:15px;color:#3C5A58">' + p.specs + '</span>' +
-        (p.recipeLabel ? '<a href="recipes.html#' + p.id + '" style="color:#0F3233;font-weight:700;font-size:16px;text-decoration:underline;text-underline-offset:5px">' + p.recipeLabel + '</a>' : '') +
+        '<span style="background:' + p.color + ';color:#023F3E;font-weight:700;font-size:17px;padding:2px 16px;border-radius:6px">' + p.tag + '</span>' +
+        '<span style="font-family:Hibuk,cursive;font-size:24px;color:#00877B">' + p.fill + '</span>' +
+        '<span style="font-size:15px;color:#2D5653">' + p.specs + '</span>' +
+        (p.recipeLabel ? '<a href="recipes.html#' + p.id + '" style="color:#023F3E;font-weight:700;font-size:16px;text-decoration:underline;text-underline-offset:5px">' + p.recipeLabel + '</a>' : '') +
         '</article>';
     }).join('');
   };
@@ -75,7 +76,7 @@
     var renderFilters = function () {
       filters.innerHTML = FL.map(function (f) {
         var on = f[0] === flt;
-        return '<button type="button" data-k="' + f[0] + '" aria-pressed="' + on + '" style="min-height:44px;padding:8px 20px;border-radius:999px;font-weight:700;font-size:17px;cursor:pointer;background:' + (on ? '#143F40' : 'transparent') + ';color:' + (on ? '#FBF8E4' : '#143F40') + ';border:2px solid #143F40">' + f[1] + '</button>';
+        return '<button type="button" data-k="' + f[0] + '" aria-pressed="' + on + '" style="min-height:44px;padding:8px 20px;border-radius:999px;font-weight:700;font-size:17px;cursor:pointer;background:' + (on ? '#005251' : 'transparent') + ';color:' + (on ? '#FBF8E4' : '#005251') + ';border:2px solid #005251">' + f[1] + '</button>';
       }).join('');
     };
     filters.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) { flt = b.dataset.k; renderFilters(); renderProducts(); } });
@@ -126,6 +127,7 @@
     return rows;
   };
   var STORES = [];
+  var CC = ['#F2CC2E', '#F27AD3', '#8EE04A', '#7FF0C9', '#F7AA45', '#A9C4F5', '#F59C7C', '#D08BF0'];
   var list = $('store-list'), search = $('store-q');
   var renderStores = function () {
     var q = (search.value || '').trim();
@@ -133,10 +135,10 @@
       var cityHit = !q || c.city.indexOf(q) > -1;
       var st = c.stores.filter(function (s) { return cityHit || s[0].indexOf(q) > -1 || s[1].indexOf(q) > -1; });
       if (!st.length) return '';
-      return '<div style="background:#F2EDD3;border-radius:18px;overflow:hidden"><div style="background:#143F40;color:#FBF8E4;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;gap:10px"><b style="font-size:20px">' + esc(c.city) + '</b><span style="font-size:15px;color:#CFD8C6">' + (st.length === 1 ? 'נקודה אחת' : st.length + ' נקודות') + '</span></div><ul style="list-style:none;margin:0;padding:4px 0">' +
+      return '<div class="lift" style="background:#F2EDD3;border-radius:18px;overflow:hidden;border-top:6px solid ' + CC[STORES.indexOf(c) % CC.length] + '"><div style="background:#005251;color:#FBF8E4;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;gap:10px"><b style="font-size:20px">' + esc(c.city) + '</b><span style="font-size:15px;color:#CDE6DF">' + (st.length === 1 ? 'נקודה אחת' : st.length + ' נקודות') + '</span></div><ul style="list-style:none;margin:0;padding:4px 0">' +
         st.map(function (s) {
           var map = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(s[0] + ' ' + s[1] + ' ' + c.city);
-          return '<li style="padding:10px 18px;border-bottom:1px solid #DCD6B4;display:flex;justify-content:space-between;align-items:center;gap:10px"><div style="display:flex;flex-direction:column;gap:2px;min-width:0"><b style="font-size:16px">' + esc(s[0]) + '</b><span style="font-size:15px;color:#3C5A58">' + esc(s[1] || c.city) + '</span></div><a href="' + map + '" target="_blank" rel="noopener" aria-label="ניווט אל ' + esc(s[0]) + '" style="flex:0 0 auto;width:44px;height:44px;border-radius:50%;background:#FBF8E4;color:#143F40;display:inline-flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 5-8 12-8 12s-8-7-8-12a8 8 0 0 1 16 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></a></li>';
+          return '<li style="padding:10px 18px;border-bottom:1px solid #E2DCC0;display:flex;justify-content:space-between;align-items:center;gap:10px"><div style="display:flex;flex-direction:column;gap:2px;min-width:0"><b style="font-size:16px">' + esc(s[0]) + '</b><span style="font-size:15px;color:#2D5653">' + esc(s[1] || c.city) + '</span></div><a href="' + map + '" target="_blank" rel="noopener" aria-label="ניווט אל ' + esc(s[0]) + '" style="flex:0 0 auto;width:44px;height:44px;border-radius:50%;background:#FBF8E4;color:#005251;display:inline-flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 5-8 12-8 12s-8-7-8-12a8 8 0 0 1 16 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></a></li>';
         }).join('') + '</ul></div>';
     }).join('');
     list.innerHTML = html;
@@ -164,21 +166,51 @@
       .then(loadStores).catch(function () { $('store-count').textContent = ''; });
   }
 
-  /* ---------- QUOTE FORM → WhatsApp ---------- */
-  var form = $('quote-form');
-  if (form) {
+  /* ---------- FORMS → EMAIL (FormSubmit) ---------- */
+  Array.prototype.forEach.call(document.querySelectorAll('form[data-mail]'), function (form) {
+    var msg = form.querySelector('.form-msg'), btn = form.querySelector('button[type=submit]');
+    var say = function (text, ok) { msg.hidden = false; msg.textContent = text; msg.style.color = ok ? '#00877B' : '#B42318'; };
     form.addEventListener('submit', function (e) {
       e.preventDefault();
-      var d = new FormData(form);
-      if (!(d.get('phone') || '').trim()) { form.phone.focus(); return; }
-      var msg = 'שלום קובה אליהו, אשמח להצעת מחיר.\n' +
-        'שם העסק: ' + (d.get('biz') || '') + '\n' +
-        'סוג העסק: ' + (d.get('type') || '') + '\n' +
-        'איש קשר: ' + (d.get('name') || '') + '\n' +
-        'טלפון: ' + (d.get('phone') || '') +
-        ((d.get('notes') || '').trim() ? '\nהערות: ' + d.get('notes') : '');
-      window.open('https://wa.me/' + S.whatsapp + '?text=' + encodeURIComponent(msg), '_blank', 'noopener');
-      $('form-done').hidden = false;
+      var bad = Array.prototype.filter.call(form.querySelectorAll('[required]'), function (el) { return !String(el.value || '').trim(); });
+      var em = form.querySelector('input[type=email]');
+      if (em && em.value.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em.value.trim())) bad.push(em);
+      Array.prototype.forEach.call(form.querySelectorAll('input,textarea,select'), function (el) { el.style.borderColor = bad.indexOf(el) > -1 ? '#B42318' : ''; el.removeAttribute('aria-invalid'); });
+      if (bad.length) { bad.forEach(function (el) { el.setAttribute('aria-invalid', 'true'); }); bad[0].focus(); say('נא למלא את השדות המסומנים.', false); return; }
+      var data = {};
+      new FormData(form).forEach(function (v, k) { data[k] = v; });
+      if (data._honey) return;
+      delete data._honey;
+      data._subject = form.getAttribute('data-subject') || 'פנייה מהאתר';
+      data._template = 'table';
+      data._captcha = 'false';
+      if (data['אימייל']) data._replyto = data['אימייל'];
+      btn.disabled = true; var label = btn.textContent; btn.textContent = 'שולחים…';
+      fetch('https://formsubmit.co/ajax/' + (S.formEmail || S.email), { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(data) })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          if (res.ok && String(res.j.success) === 'true') { form.reset(); say('תודה! הפנייה התקבלה ונחזור אליכם בהקדם.', true); }
+          else if (/activat/i.test(res.j.message || '')) { say('הטופס ממתין להפעלה חד-פעמית. בינתיים אפשר להתקשר: 02-509-2863', false); }
+          else { say('משהו השתבש בשליחה. אפשר לנסות שוב או להתקשר: 02-509-2863', false); }
+        })
+        .catch(function () { say('אין חיבור כרגע. אפשר לנסות שוב או להתקשר: 02-509-2863', false); })
+        .then(function () { btn.disabled = false; btn.textContent = label; });
     });
+  });
+
+  /* ---------- STICKY HEADER SHADOW ---------- */
+  var hd = document.querySelector('.site-hd');
+  if (hd) { var onS = function () { hd.classList.toggle('scrolled', window.scrollY > 8); }; window.addEventListener('scroll', onS, { passive: true }); onS(); }
+
+  /* ---------- REVEAL ON SCROLL ---------- */
+  if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    var io = new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }); }, { rootMargin: '0px 0px -8% 0px' });
+    var mark = function () {
+      document.querySelectorAll('main section > div, .pcard, .rec-row > a, .rp-sec > div, #store-list > div').forEach(function (el, i) {
+        if (el.classList.contains('rv') || el.closest('#top')) return;
+        el.classList.add('rv'); el.style.transitionDelay = ((i % 4) * 70) + 'ms'; io.observe(el);
+      });
+    };
+    mark(); new MutationObserver(mark).observe(document.body, { childList: true, subtree: true });
   }
 })();

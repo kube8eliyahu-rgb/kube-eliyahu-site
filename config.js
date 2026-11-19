@@ -5,6 +5,9 @@ window.SITE = {
   whatsapp: '972509766643',
   email: 'kube8eliyahu@gmail.com',
 
+  // לאן נשלחות הפניות מהטפסים (הצעת מחיר + צור קשר)
+  formEmail: 'kube8eliyahu@gmail.com',
+
   // רשימת החנויות:
   // אם מפרסמים גיליון Google Sheets כ-CSV, מדביקים כאן את הקישור והאתר יקרא ממנו.
   // אם ריק – האתר קורא מהקובץ stores.csv
