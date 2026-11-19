@@ -110,7 +110,7 @@ section:has(#contact-form){padding:36px 16px 56px!important;gap:28px!important}
 .prod-row h3{font-size:24px!important}
 #story{padding:36px 16px!important}
 .story-in{padding:28px 20px!important;gap:30px!important;border-radius:22px!important}
-.story-in img[alt]{height:300px!important}
+.story-in img[alt]{height:auto!important;aspect-ratio:3/4;object-position:50% 6%!important}
 .story-in > div:last-child > p:first-child{font-size:27px!important}
 .story-in h2{font-size:32px!important}
 #recipes{padding:8px 16px 44px!important;gap:18px!important}
