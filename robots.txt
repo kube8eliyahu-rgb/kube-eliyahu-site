@@ -47,4 +47,4 @@ Allow: /
 User-agent: *
 Allow: /
 
-Sitemap: https://kube-eliyahu-site.pages.dev/sitemap.xml
+Sitemap: https://kubeeliyahu.com/sitemap.xml

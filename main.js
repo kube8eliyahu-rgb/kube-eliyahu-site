@@ -157,7 +157,7 @@
     });
     STORES = order.map(function (c) { return { city: c, stores: by[c] }; });
     var n = 0; STORES.forEach(function (c) { n += c.stores.length; });
-    $('store-count').textContent = n + ' נקודות מכירה ב-' + STORES.length + ' יישובים ברחבי הארץ';
+    $('store-count').textContent = 'נקודות מכירה ברחבי הארץ – חפשו לפי עיר';
     var pc = $('point-count'); if (pc) pc.textContent = n;
     renderStores();
   };

@@ -1,22 +1,22 @@
 # קובה אליהו (Kube Eliyahu)
 
-> קובה אליהו היא יצרנית ישראלית של קובה למרק, קובה לבישול, קובה לטיגון וסיגרים ממולאים בשר, לפי המתכונים של סבתא אסנת אליהו ממושב זכריה שבעמק האלה. כל המוצרים כשרים בשריים מהדרין (בד״ץ ״יורה דעה״, בפיקוח הרב שלמה מחפוד), נמכרים ב-153 נקודות מכירה בכ-60 יישובים בישראל ומסופקים גם למסעדות, קייטרינג ומוסדות. בגב כל אריזה מופיע מתכון של סבתא.
+> קובה אליהו היא יצרנית ישראלית של קובה למרק, קובה לבישול, קובה לטיגון וסיגרים ממולאים בשר, לפי המתכונים של סבתא אסנת אליהו ממושב זכריה שבעמק האלה. כל המוצרים כשרים בשריים מהדרין (בד״ץ ״יורה דעה״, בפיקוח הרב שלמה מחפוד), נמכרים בנקודות מכירה ברחבי ישראל ומסופקים גם למסעדות, קייטרינג ומוסדות. בגב כל אריזה מופיע מתכון של סבתא.
 
-Kube Eliyahu is an Israeli producer of kubbeh (kibbeh) dumplings for soup and for frying, and meat-filled cigars, based on the family recipes of grandmother Osnat Eliyahu from Moshav Zecharia in the Ela Valley. All products are kosher (meat, mehadrin – Badatz Yoreh De'ah). Sold at 153 points of sale across Israel and supplied to restaurants, caterers and institutions.
+Kube Eliyahu is an Israeli producer of kubbeh (kibbeh) dumplings for soup and for frying, and meat-filled cigars, based on the family recipes of grandmother Osnat Eliyahu from Moshav Zecharia in the Ela Valley. All products are kosher (meat, mehadrin – Badatz Yoreh De'ah). Sold at retail points across Israel and supplied to restaurants, caterers and institutions.
 
 ## הסיפור בקצרה
-איתמר אליהו, הנכד של סבתא אסנת אליהו, גדל אצלה, בבית פתוח שבו כל מי שהגיע רעב יצא שבע. הוא תמיד שאל אותה למה היא לא עושה משהו עם האוכל שלה. אחרי פציעה קשה, בזמן השיקום, הוא התחיל לגלגל קובות לפי הטעמים שלה, עבד מהבוקר עד לפנות בוקר על העברת הייצור הביתי לתעשייה, וגדל מיום ליום – כשאביו, נחום אליהו, מלווה אותו לכל מקום. היום קובה אליהו ממשיכה את המסורת של סבתא אסנת ומביאה את הטעמים, הזיכרונות והחוויה מהבית שלה לכל בית בישראל. הסיפור המלא: https://kube-eliyahu-site.pages.dev/story.html
+איתמר אליהו, הנכד של סבתא אסנת אליהו, גדל אצלה, בבית פתוח שבו כל מי שהגיע רעב יצא שבע. הוא תמיד שאל אותה למה היא לא עושה משהו עם האוכל שלה. אחרי פציעה קשה, בזמן השיקום, הוא התחיל לגלגל קובות לפי הטעמים שלה, עבד מהבוקר עד לפנות בוקר על העברת הייצור הביתי לתעשייה, וגדל מיום ליום – כשאביו, נחום אליהו, מלווה אותו לכל מקום. היום קובה אליהו ממשיכה את המסורת של סבתא אסנת ומביאה את הטעמים, הזיכרונות והחוויה מהבית שלה לכל בית בישראל. הסיפור המלא: https://kubeeliyahu.com/story.html
 
 ## מוצרים
-- [קובה עוף](https://kube-eliyahu-site.pages.dev/product-chicken.html): למרק, במילוי בשר עוף, 44% בשר עוף. בישול כ-8 דקות, 800 גרם. ברקוד: 0761742922097.
-- [קובה סיסקה](https://kube-eliyahu-site.pages.dev/product-sisca.html): למרק, במילוי בשר מפורק, 51% בשר בקר. בישול כ-8 דקות, 800 גרם. ברקוד: 0788364729293.
-- [קובה מטפוניה](https://kube-eliyahu-site.pages.dev/product-matpunya.html): למרק, במילוי בשר בקר, 48% בשר בקר. בישול כ-8 דקות, 800 גרם. ברקוד: 0788364729309.
-- [הקובה של סבתא אסנת](https://kube-eliyahu-site.pages.dev/product-savta.html): למרק, במתכון האותנטי, 47% בשר בקר. בישול כ-8 דקות, 800 גרם. ברקוד: 0724133470355.
-- [קובה אורז](https://kube-eliyahu-site.pages.dev/product-rice.html): לבישול, ללא רכיבי דגן. בישול כ-25 דקות, 800 גרם. ברקוד: 0761742922080.
-- [קובה נבולסיה](https://kube-eliyahu-site.pages.dev/product-nabulsia.html): לטיגון, במילוי בשר בקר וצנוברים. טיגון עד השחמה, 800 גרם. ברקוד: 0761742922110.
-- [סיגר סיסקה](https://kube-eliyahu-site.pages.dev/product-cigar.html): לטיגון, במילוי בשר מפורק, 47% בשר בקר. טיגון עד השחמה, 450 גרם. ברקוד: 0761742922103.
-- [סיגר מרוקאי](https://kube-eliyahu-site.pages.dev/product-cigar-marokai.html): לטיגון, בסגנון פיקנטי, 56% בשר בקר. טיגון עד השחמה, 450 גרם. ברקוד: 0761742922127.
-- [ארנצ׳יני סיסקה](https://kube-eliyahu-site.pages.dev/product-arancini.html): לטיגון, במילוי בשר מפורק. טיגון עד השחמה, 800 גרם. ברקוד: 0724133470362.
+- [קובה עוף](https://kubeeliyahu.com/product-chicken.html): למרק, במילוי בשר עוף, 44% בשר עוף. בישול כ-8 דקות, 800 גרם. ברקוד: 0761742922097.
+- [קובה סיסקה](https://kubeeliyahu.com/product-sisca.html): למרק, במילוי בשר מפורק, 51% בשר בקר. בישול כ-8 דקות, 800 גרם. ברקוד: 0788364729293.
+- [קובה מטפוניה](https://kubeeliyahu.com/product-matpunya.html): למרק, במילוי בשר בקר, 48% בשר בקר. בישול כ-8 דקות, 800 גרם. ברקוד: 0788364729309.
+- [הקובה של סבתא אסנת](https://kubeeliyahu.com/product-savta.html): למרק, במתכון האותנטי, 47% בשר בקר. בישול כ-8 דקות, 800 גרם. ברקוד: 0724133470355.
+- [קובה אורז](https://kubeeliyahu.com/product-rice.html): לבישול, ללא רכיבי דגן. בישול כ-25 דקות, 800 גרם. ברקוד: 0761742922080.
+- [קובה נבולסיה](https://kubeeliyahu.com/product-nabulsia.html): לטיגון, במילוי בשר בקר וצנוברים. טיגון עד השחמה, 800 גרם. ברקוד: 0761742922110.
+- [סיגר סיסקה](https://kubeeliyahu.com/product-cigar.html): לטיגון, במילוי בשר מפורק, 47% בשר בקר. טיגון עד השחמה, 450 גרם. ברקוד: 0761742922103.
+- [סיגר מרוקאי](https://kubeeliyahu.com/product-cigar-marokai.html): לטיגון, בסגנון פיקנטי, 56% בשר בקר. טיגון עד השחמה, 450 גרם. ברקוד: 0761742922127.
+- [ארנצ׳יני סיסקה](https://kubeeliyahu.com/product-arancini.html): לטיגון, במילוי בשר מפורק. טיגון עד השחמה, 800 גרם. ברקוד: 0724133470362.
 
 ## עובדות מרכזיות
 - איכות: אחוז בשר גבוה (עד 51% בשר בקר בקובה סיסקה ו-56% בסיגר המרוקאי), בשר בקר מנתח צלעות מס׳ 2 בלבד, ומעטפת דקה במיוחד.
@@ -27,19 +27,19 @@ Kube Eliyahu is an Israeli producer of kubbeh (kibbeh) dumplings for soup and fo
 - קובה אורז מתבשלת כ-25 דקות. על האריזה מצוין ״ללא רכיבי דגן״.
 - קובה נבולסיה, סיגר סיסקה, סיגר מרוקאי וארנצ׳יני סיסקה מטוגנים עד השחמה.
 - כשרות: כשר בשרי מהדרין, בד״ץ ״יורה דעה״, בפיקוח הרב שלמה מחפוד.
-- נקודות מכירה: 153 חנויות בכ-60 יישובים, ביניהם ירושלים, בית שמש, תל אביב, ראשון לציון, חיפה, באר שבע ואשדוד.
+- נקודות מכירה: חנויות ביישובים רבים, ביניהם ירושלים, בית שמש, תל אביב, ראשון לציון, חיפה, באר שבע ואשדוד.
 - לעסקים: הפצה לכל הארץ, קטלוג עסקי והצעות מחיר.
 
 ## עמודים
-- [דף הבית](https://kube-eliyahu-site.pages.dev/)
-- [כל המוצרים](https://kube-eliyahu-site.pages.dev/products.html)
-- [מתכונים למרק קובה ולרטבים](https://kube-eliyahu-site.pages.dev/recipes.html): מרק לקובה עוף, מרק חמוסטה, מרק סלק, מרק במיה, טחינה ירוקה, איולי
-- [איפה קונים](https://kube-eliyahu-site.pages.dev/where.html)
-- [הסיפור של סבתא אסנת](https://kube-eliyahu-site.pages.dev/story.html)
-- [שאלות נפוצות על קובה](https://kube-eliyahu-site.pages.dev/faq.html)
-- [לעסקים ולמסעדות](https://kube-eliyahu-site.pages.dev/business.html)
-- [הקטלוג העסקי](https://kube-eliyahu-site.pages.dev/catalog.html) · [PDF](https://kube-eliyahu-site.pages.dev/catalog-kube-eliyahu.pdf)
-- [צור קשר](https://kube-eliyahu-site.pages.dev/contact.html)
+- [דף הבית](https://kubeeliyahu.com/)
+- [כל המוצרים](https://kubeeliyahu.com/products.html)
+- [מתכונים למרק קובה ולרטבים](https://kubeeliyahu.com/recipes.html): מרק לקובה עוף, מרק חמוסטה, מרק סלק, מרק במיה, טחינה ירוקה, איולי
+- [איפה קונים](https://kubeeliyahu.com/where.html)
+- [הסיפור של סבתא אסנת](https://kubeeliyahu.com/story.html)
+- [שאלות נפוצות על קובה](https://kubeeliyahu.com/faq.html)
+- [לעסקים ולמסעדות](https://kubeeliyahu.com/business.html)
+- [הקטלוג העסקי](https://kubeeliyahu.com/catalog.html) · [PDF](https://kubeeliyahu.com/catalog-kube-eliyahu.pdf)
+- [צור קשר](https://kubeeliyahu.com/contact.html)
 
 ## יצירת קשר
 - טלפון: 02-509-2863 · 050-976-6643
