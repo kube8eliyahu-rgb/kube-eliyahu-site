@@ -13,6 +13,11 @@ window.SITE = {
   // אם ריק – האתר קורא מהקובץ stores.csv
   storesCsvUrl: '',
 
+  // כלי מדידה ושיווק – נטענים רק אחרי שהגולש אישר עוגיות
+  metaPixelId: '1464062874443059',      // מזהה הפיקסל של Meta (פייסבוק/אינסטגרם) – מספרים בלבד
+  ga4Id: 'G-NGT9Z9JWJX',          // Google Analytics 4, בפורמט G-XXXXXXX (לא חובה)
+  tiktokPixelId: '',    // פיקסל טיקטוק (לא חובה)
+
   // רשתות חברתיות (משאירים ריק כדי להסתיר כפתור)
   social: {
     instagram: 'https://www.instagram.com/kube_eliyahu',
