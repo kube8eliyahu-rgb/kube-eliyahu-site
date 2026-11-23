@@ -36,7 +36,7 @@ export async function onRequestGet({ request, env }) {
 
   // אימות ה-Webhook מול מטא
   if (p.get('hub.mode') === 'subscribe') {
-    const ok = env.VERIFY_TOKEN && p.get('hub.verify_token') === env.VERIFY_TOKEN;
+    const ok = env.VERIFY_TOKEN && p.get('hub.verify_token') === String(env.VERIFY_TOKEN).trim();
     return new Response(ok ? p.get('hub.challenge') : 'forbidden', { status: ok ? 200 : 403 });
   }
 
@@ -46,7 +46,7 @@ export async function onRequestGet({ request, env }) {
     if (view === 'complaints') return complaintsCsvResponse(env);
     if (view === 'check') {
       // בדיקת חיבור לפייסבוק – בלי לחשוף את הקוד עצמו
-      const G = `https://graph.facebook.com/${GRAPH_VERSION}`, t = encodeURIComponent(env.PAGE_ACCESS_TOKEN || '');
+      const G = `https://graph.facebook.com/${GRAPH_VERSION}`, t = encodeURIComponent(String(env.PAGE_ACCESS_TOKEN || '').trim());
       const get = async path => { const r = await fetch(`${G}/${path}${path.includes('?') ? '&' : '?'}access_token=${t}`); const j = await r.json().catch(() => ({})); return r.ok ? j : { error: (j.error && j.error.message) || r.status }; };
       const page = await get(`${env.PAGE_ID}?fields=name`);
       const subs = await get(`${env.PAGE_ID}/subscribed_apps`);
@@ -80,7 +80,13 @@ export async function onRequestGet({ request, env }) {
 export async function onRequestPost(context) {
   const { request, env } = context;
   const raw = await request.arrayBuffer();
-  if (!(await validSignature(env, request, raw))) return new Response('bad signature', { status: 401 });
+  if (!(await validSignature(env, request, raw))) {
+    // רושמים ביומן כדי שיהיה ברור מה קרה (בלי לחשוף את הקוד)
+    const s = String(env.APP_SECRET || '').trim();
+    const note = `❌ בקשה מפייסבוק נדחתה: הקוד APP_SECRET לא תואם (אורך הקוד השמור: ${s.length} תווים, אמור להיות 32)`;
+    context.waitUntil((async () => { if (env.BOT_KV) { const prev = (await kvGetJson(env, 'log')) || []; prev.push(new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' }) + '  ' + note); await env.BOT_KV.put('log', JSON.stringify(prev.slice(-300))); } })());
+    return new Response('bad signature', { status: 401 });
+  }
 
   let body;
   try { body = JSON.parse(new TextDecoder().decode(raw)); } catch { return new Response('ok'); }
@@ -107,9 +113,10 @@ const json = o => new Response(JSON.stringify(o, null, 2), { headers: { 'content
 const dry = env => String(env.DRY_RUN ?? 'true').toLowerCase() !== 'false';
 
 async function validSignature(env, request, raw) {
-  if (!env.APP_SECRET) return true;
+  const secret = String(env.APP_SECRET || '').trim();
+  if (!secret) return true;
   const sig = request.headers.get('x-hub-signature-256') || '';
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.APP_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, raw));
   const expected = 'sha256=' + [...mac].map(b => b.toString(16).padStart(2, '0')).join('');
   if (sig.length !== expected.length) return false;
@@ -127,7 +134,7 @@ function makeCtx(env, stores) {
 
   async function graph(method, endpoint, body) {
     if (dry(env)) { lines.push(`${stamp()}   [בדיקה] ${method} ${endpoint} ${body ? JSON.stringify(body) : ''}`); return { dry: true }; }
-    const res = await fetch(`${G}/${endpoint}?access_token=${encodeURIComponent(env.PAGE_ACCESS_TOKEN || '')}`, {
+    const res = await fetch(`${G}/${endpoint}?access_token=${encodeURIComponent(String(env.PAGE_ACCESS_TOKEN || '').trim())}`, {
       method, headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined,
     });
     const j = await res.json().catch(() => ({}));
