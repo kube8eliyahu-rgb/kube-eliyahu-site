@@ -92,6 +92,8 @@ export async function onRequestPost(context) {
     for (const entry of body.entry || [])
       for (const ch of entry.changes || [])
         if (ch.field === 'feed') {
+          const v = ch.value || {};
+          await ctx.log(`📥 התקבל מפייסבוק: ${v.item || '?'} / ${v.verb || '?'}${v.from && v.from.name ? ' מ' + v.from.name : ''}${v.message ? ' – "' + String(v.message).slice(0, 60) + '"' : ''}`);
           try { await handleComment(ctx, ch.value); }
           catch (e) { await ctx.log(`❌ שגיאה: ${e.message}`); }
         }
