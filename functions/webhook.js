@@ -44,6 +44,20 @@ export async function onRequestGet({ request, env }) {
   if (p.get('key') && env.REPORT_KEY && p.get('key') === env.REPORT_KEY) {
     const view = p.get('view') || 'log';
     if (view === 'complaints') return complaintsCsvResponse(env);
+    if (view === 'check') {
+      // בדיקת חיבור לפייסבוק – בלי לחשוף את הקוד עצמו
+      const G = `https://graph.facebook.com/${GRAPH_VERSION}`, t = encodeURIComponent(env.PAGE_ACCESS_TOKEN || '');
+      const get = async path => { const r = await fetch(`${G}/${path}${path.includes('?') ? '&' : '?'}access_token=${t}`); const j = await r.json().catch(() => ({})); return r.ok ? j : { error: (j.error && j.error.message) || r.status }; };
+      const page = await get(`${env.PAGE_ID}?fields=name`);
+      const subs = await get(`${env.PAGE_ID}/subscribed_apps`);
+      return json({
+        page: page.name || page.error,
+        subscribed: (subs.data || []).map(a => `${a.name}: ${(a.subscribed_fields || []).join(', ')}`),
+        subscribedError: subs.error || null,
+        secrets: { VERIFY_TOKEN: !!env.VERIFY_TOKEN, APP_SECRET: !!env.APP_SECRET, PAGE_ACCESS_TOKEN: !!env.PAGE_ACCESS_TOKEN, SMTP_PASS: !!env.SMTP_PASS, KV: !!env.BOT_KV },
+        mode: dry(env) ? 'בדיקה (DRY_RUN)' : 'פעיל',
+      });
+    }
     if (view === 'test') {
       // בדיקה בלי פייסבוק: מה הבוט היה עושה עם תגובה
       const msg = p.get('msg') || '';
