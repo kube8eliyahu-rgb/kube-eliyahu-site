@@ -44,9 +44,14 @@ export async function onRequestGet({ request, env }) {
   if (p.get('key') && env.REPORT_KEY && p.get('key') === env.REPORT_KEY) {
     const view = p.get('view') || 'log';
     if (view === 'complaints') return complaintsCsvResponse(env);
+    if (view === 'mailtest') {
+      try { await sendViaFormSubmit(env, '✅ בדיקה: הבוט של קובה אליהו מחובר למייל', { 'הודעה': 'זו הודעת בדיקה. מעכשיו תלונות מהפייסבוק יגיעו לכאן.', 'קובץ כל התלונות (אקסל)': complaintsLink(env) }); return json({ ok: true }); }
+      catch (e) { return json({ ok: false, error: e.message }); }
+    }
+    if (view === 'backfill') return backfill(env, request, p);
     if (view === 'check') {
       // בדיקת חיבור לפייסבוק – בלי לחשוף את הקוד עצמו
-      const G = `https://graph.facebook.com/${GRAPH_VERSION}`, t = encodeURIComponent(String(env.PAGE_ACCESS_TOKEN || '').trim());
+      const G = `${env.GRAPH_BASE || "https://graph.facebook.com"}/${GRAPH_VERSION}`, t = encodeURIComponent(String(env.PAGE_ACCESS_TOKEN || '').trim());
       const get = async path => { const r = await fetch(`${G}/${path}${path.includes('?') ? '&' : '?'}access_token=${t}`); const j = await r.json().catch(() => ({})); return r.ok ? j : { error: (j.error && j.error.message) || r.status }; };
       const page = await get(`${env.PAGE_ID}?fields=name`);
       const subs = await get(`${env.PAGE_ID}/subscribed_apps`);
@@ -69,7 +74,7 @@ export async function onRequestGet({ request, env }) {
     const log = (await kvGetJson(env, 'log')) || [];
     const stores = await getStores(env, request);
     const head = `בוט קובה אליהו | מצב: ${dry(env) ? 'בדיקה (DRY_RUN) – לא מפרסם כלום' : 'פעיל'} | חנויות: ${stores.length} | ` +
-      `מייל: ${env.SMTP_USER && env.SMTP_PASS ? 'מוגדר' : 'לא מוגדר'} | Claude: ${env.ANTHROPIC_API_KEY ? 'פעיל' : 'כבוי'}\n` +
+      `מייל: ${env.SMTP_USER && env.SMTP_PASS ? 'ג׳ימייל' : 'FormSubmit'} | Claude: ${env.ANTHROPIC_API_KEY ? 'פעיל' : 'כבוי'}\n` +
       `${'-'.repeat(60)}\n`;
     return new Response(head + log.slice().reverse().join('\n'), { headers: { 'content-type': 'text/plain; charset=utf-8' } });
   }
@@ -130,7 +135,7 @@ async function validSignature(env, request, raw) {
 function makeCtx(env, stores) {
   const lines = [];
   const stamp = () => new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
-  const G = `https://graph.facebook.com/${GRAPH_VERSION}`;
+  const G = `${env.GRAPH_BASE || "https://graph.facebook.com"}/${GRAPH_VERSION}`;
 
   async function graph(method, endpoint, body) {
     if (dry(env)) { lines.push(`${stamp()}   [בדיקה] ${method} ${endpoint} ${body ? JSON.stringify(body) : ''}`); return { dry: true }; }
@@ -225,6 +230,69 @@ async function decide(ctx, { message, fromName, isReplyInThread }) {
     return { action: 'thanks', reply: s.reply, by: s.by };
   }
   return { action: 'ignore', type: s.type, by: s.by };
+}
+
+/* ---------------------------------------------------------------------
+   מענה לתגובות מהעבר: /webhook?key=...&view=backfill&days=180&dry=1
+   עובר על הפוסטים של הדף, ועל כל תגובה ראשית שעוד לא קיבלה מענה מהדף
+   מחליט כמו הבוט (חנויות / תודה / תלונה). מחזיר "next" להמשך (מגבלת בקשות של Cloudflare).
+--------------------------------------------------------------------- */
+async function backfill(env, request, p) {
+  const G = `${env.GRAPH_BASE || "https://graph.facebook.com"}/${GRAPH_VERSION}`;
+  const tok = encodeURIComponent(String(env.PAGE_ACCESS_TOKEN || '').trim());
+  const days = Math.min(Number(p.get('days') || 180), 730);
+  const isDry = p.get('dry') !== '0';
+  const since = Math.floor(Date.now() / 1000) - days * 86400;
+  let budget = 40;                                   // מגבלת בקשות לכל קריאה
+  const get = async url => { budget--; const r = await fetch(url); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(JSON.stringify(j.error || r.status).slice(0, 300)); return j; };
+  const stores = await getStores(env, request);
+  const out = { dry: isDry, days, done: [], skipped: 0, errors: [], next: null };
+  const ctx = makeCtx({ ...env, DRY_RUN: isDry ? 'true' : 'false' }, stores);
+  let postsUrl = p.get('next') || `${G}/${env.PAGE_ID}/posts?fields=id,created_time&since=${since}&limit=10&access_token=${tok}`;
+  try {
+    while (postsUrl && budget > 8) {
+      const cur = postsUrl;
+      const posts = await get(postsUrl);
+      postsUrl = (posts.paging && posts.paging.next) || null;
+      for (const post of posts.data || []) {
+        if (budget < 6) { out.next = cur; break; }        // ממשיכים מאותו עמוד – מה שכבר טופל ידולג
+        const cm = await get(`${G}/${post.id}/comments?filter=toplevel&order=chronological&fields=id,message,created_time,from,comments.limit(25){from}&limit=100&access_token=${tok}`);
+        for (const c of cm.data || []) {
+          if (!c.message || !c.message.trim()) continue;
+          if (c.from && c.from.id === env.PAGE_ID) continue;                          // תגובה של הדף עצמו
+          if ((c.comments && c.comments.data || []).some(r => r.from && r.from.id === env.PAGE_ID)) { out.skipped++; continue; } // כבר ענינו
+          if (await ctx.seen(c.id)) { out.skipped++; continue; }
+          const d = await decide(ctx, { message: c.message, fromName: c.from && c.from.name, isReplyInThread: false });
+          if (d.action === 'ignore') continue;
+          const ageDays = (Date.now() - new Date(c.created_time).getTime()) / 86400000;
+          const item = { id: c.id, date: c.created_time.slice(0, 10), from: c.from ? c.from.name : '', text: c.message.slice(0, 120), action: d.action, reply: d.publicReply || d.reply || '' };
+          out.done.push(item);
+          if (isDry) continue;
+          if (budget < 4) { out.next = null; out.errors.push('נעצר באמצע – להריץ שוב'); break; }
+          await ctx.markSeen(c.id);
+          try {
+            if (d.action === 'stores') {
+              budget--; await ctx.replyPublic(c.id, d.publicReply);
+              if (ageDays < 7) { budget--; await ctx.replyPrivate(c.id, d.privateReply).catch(() => {}); }
+            } else if (d.action === 'thanks') {
+              budget -= 2; await ctx.like(c.id).catch(() => {}); await ctx.replyPublic(c.id, d.reply);
+            } else if (d.action === 'complaint') {
+              const rec = { id: c.id, postId: post.id, message: c.message, fromName: item.from, fromId: c.from ? c.from.id : '', health: d.health, time: new Date(c.created_time).getTime(), action: 'הוסתרה (תגובה מהעבר)' };
+              if (env.BOT_KV) await env.BOT_KV.put(`complaint:${new Date(rec.time).toISOString()}:${c.id}`, JSON.stringify(rec));
+              budget--; await ctx.hide(c.id);
+            }
+            await ctx.log(`🕘 מהעבר (${item.date}) ${d.action === 'stores' ? '📍' : d.action === 'thanks' ? '💛' : '⚠️'} ${item.from || 'גולש'}: "${item.text.slice(0, 60)}"`);
+          } catch (e) { out.errors.push(`${c.id}: ${e.message}`); }
+        }
+        if (out.next) break;
+      }
+      if (out.next) break;
+    }
+    if (!out.next && postsUrl && budget <= 8) out.next = postsUrl;
+  } catch (e) { out.errors.push(e.message); }
+  await ctx.flushLog();
+  if (out.next) out.continueUrl = `/webhook?key=${p.get('key')}&view=backfill&days=${days}&dry=${isDry ? 1 : 0}&next=${encodeURIComponent(out.next)}`;
+  return json(out);
 }
 
 /* ---------------------------------------------------------------------
@@ -510,8 +578,34 @@ function buildComplaintMime(env, c) {
   ].join('\r\n');
 }
 
+// בלי סיסמת ג'ימייל: שולחים דרך FormSubmit – אותו שירות שהטפסים באתר כבר משתמשים בו
+async function sendViaFormSubmit(env, subject, fields) {
+  const to = env.ALERT_EMAIL_TO || 'kube8eliyahu@gmail.com';
+  const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(to)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', Origin: 'https://kubeeliyahu.com', Referer: 'https://kubeeliyahu.com/contact.html' },
+    body: JSON.stringify({ _subject: subject, _template: 'table', _captcha: 'false', ...fields }),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || String(j.success) !== 'true') throw new Error('FormSubmit: ' + (j.message || res.status));
+}
+
+function complaintsLink(env) {
+  return env.REPORT_KEY ? `https://kubeeliyahu.com/webhook?key=${String(env.REPORT_KEY).trim()}&view=complaints` : '';
+}
+
 async function sendComplaintEmail(env, c) {
-  if (!env.SMTP_USER || !env.SMTP_PASS) throw new Error('לא הוגדרו SMTP_USER / SMTP_PASS');
+  if (!env.SMTP_USER || !env.SMTP_PASS) {
+    const subject = `${c.health ? '🚨 דחוף – בטיחות מזון: ' : '⚠️ '}תגובה שלילית בפייסבוק מ${c.fromName || 'גולש'}`;
+    return sendViaFormSubmit(env, subject, {
+      'מי כתב': c.fromName || '',
+      'מה נכתב': c.message || '',
+      'בטיחות מזון': c.health ? 'כן – מומלץ לחזור ללקוח היום' : 'לא',
+      'מה הבוט עשה': 'הסתיר את התגובה (הכותב וחבריו עדיין רואים אותה; אפשר לבטל הסתרה בפייסבוק)',
+      'קישור לפוסט': c.postId ? `https://www.facebook.com/${c.postId}` : '',
+      'קובץ כל התלונות (אקסל)': complaintsLink(env),
+    });
+  }
   const host = env.SMTP_HOST || 'smtp.gmail.com';
   const port = Number(env.SMTP_PORT || 465);
   const tls = String(env.SMTP_TLS ?? 'on') !== 'off';
