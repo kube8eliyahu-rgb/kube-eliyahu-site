@@ -82,11 +82,19 @@ export async function onRequestGet({ request, env: rawEnv }) {
       const G = `${env.GRAPH_BASE || "https://graph.facebook.com"}/${GRAPH_VERSION}`, t = encodeURIComponent(String(env.PAGE_ACCESS_TOKEN || '').trim());
       const get = async path => { const r = await fetch(`${G}/${path}${path.includes('?') ? '&' : '?'}access_token=${t}`); const j = await r.json().catch(() => ({})); return r.ok ? j : { error: (j.error && j.error.message) || r.status }; };
       const page = await get(`${env.PAGE_ID}?fields=name`);
+      if (p.get('subscribe') === '1') {
+        const r = await fetch(`${G}/${env.PAGE_ID}/subscribed_apps?subscribed_fields=feed,messages,message_echoes&access_token=${t}`, { method: 'POST' });
+        await r.json().catch(() => ({}));
+      }
       const subs = await get(`${env.PAGE_ID}/subscribed_apps`);
+      const ig = await get(`${env.PAGE_ID}?fields=instagram_business_account{id,username}`);
+      const dbg = env.APP_SECRET ? await (await fetch(`${G}/debug_token?input_token=${t}&access_token=${APP_ID}|${encodeURIComponent(String(env.APP_SECRET).trim())}`)).json().catch(() => ({})) : {};
       return json({
         page: page.name || page.error,
         subscribed: (subs.data || []).map(a => `${a.name}: ${(a.subscribed_fields || []).join(', ')}`),
         subscribedError: subs.error || null,
+        instagram: ig.instagram_business_account ? '@' + ig.instagram_business_account.username + ' (' + ig.instagram_business_account.id + ')' : (ig.error || 'לא מחובר לדף'),
+        permissions: (dbg.data && dbg.data.scopes) || [],
         secrets: { VERIFY_TOKEN: !!env.VERIFY_TOKEN, APP_SECRET: !!env.APP_SECRET, PAGE_ACCESS_TOKEN: !!env.PAGE_ACCESS_TOKEN, SMTP_PASS: !!env.SMTP_PASS, KV: !!env.BOT_KV },
         mode: dry(env) ? 'בדיקה (DRY_RUN)' : 'פעיל',
       });
@@ -126,19 +134,37 @@ export async function onRequestPost(context) {
 
   let body;
   try { body = JSON.parse(new TextDecoder().decode(raw)); } catch { return new Response('ok'); }
-  if (body.object !== 'page') return new Response('ok');
+  if (body.object !== 'page' && body.object !== 'instagram') return new Response('ok');
+  const platform = body.object === 'instagram' ? 'ig' : 'fb';
 
   const work = (async () => {
     const stores = await getStores(env, request);
     const ctx = makeCtx(env, stores);
-    for (const entry of body.entry || [])
-      for (const ch of entry.changes || [])
-        if (ch.field === 'feed') {
+    for (const entry of body.entry || []) {
+      // הודעות לאינבוקס (מסנג'ר / אינסטגרם דיירקט)
+      for (const ev of entry.messaging || []) {
+        try { await handleMessage(ctx, ev, platform, entry.id); }
+        catch (e) { await ctx.log(`❌ שגיאה בהודעה: ${e.message}`); }
+      }
+      for (const ch of entry.changes || []) {
+        if (platform === 'ig' && (ch.field === 'comments' || ch.field === 'live_comments')) {
+          const v = ch.value || {};
+          await ctx.log(`📥 התקבל מאינסטגרם: תגובה מ-${(v.from && v.from.username) || '?'} – "${String(v.text || '').slice(0, 60)}"`);
+          try { await handleIgComment(ctx, v, entry.id); }
+          catch (e) { await ctx.log(`❌ שגיאה (אינסטגרם): ${e.message}`); }
+        }
+        if (platform === 'ig' && ch.field === 'messages' && ch.value) {   // פורמט חלופי של אינסטגרם
+          try { await handleMessage(ctx, ch.value, platform, entry.id); }
+          catch (e) { await ctx.log(`❌ שגיאה בהודעה: ${e.message}`); }
+        }
+        if (platform === 'fb' && ch.field === 'feed') {
           const v = ch.value || {};
           await ctx.log(`📥 התקבל מפייסבוק: ${v.item || '?'} / ${v.verb || '?'}${v.from && v.from.name ? ' מ' + v.from.name : ''}${v.message ? ' – "' + String(v.message).slice(0, 60) + '"' : ''}`);
           try { await handleComment(ctx, ch.value); }
           catch (e) { await ctx.log(`❌ שגיאה: ${e.message}`); }
         }
+      }
+    }
     await ctx.flushLog();
   })();
   context.waitUntil(work);            // עונים למטא מיד, מטפלים ברקע
@@ -192,6 +218,17 @@ function makeCtx(env, stores) {
     replyPrivate: (id, text) => graph('POST', `${env.PAGE_ID}/messages`, { recipient: { comment_id: id }, message: { text: text.slice(0, 1990) } }),
     like: id => graph('POST', `${id}/likes`),
     hide: id => graph('POST', id, { is_hidden: true }),
+    igReply: (id, text) => graph('POST', `${id}/replies`, { message: text }),
+    igHide: id => graph('POST', id, { hide: true }),
+    sendDm: async (recipientId, text) => {
+      // אינסטגרם מגביל ל-1000 תווים להודעה – מפצלים לפי שורות
+      const parts = []; let cur = '';
+      for (const ln of String(text).split('\n')) { if ((cur + '\n' + ln).length > 950 && cur) { parts.push(cur); cur = ln; } else cur = cur ? cur + '\n' + ln : ln; }
+      if (cur) parts.push(cur);
+      for (const t of parts.slice(0, 4)) await graph('POST', `${env.PAGE_ID}/messages`, { recipient: { id: recipientId }, messaging_type: 'RESPONSE', message: { text: t.slice(0, 990) } });
+    },
+    kvGet: k => env.BOT_KV ? env.BOT_KV.get(k) : null,
+    kvPut: (k, v, ttl) => env.BOT_KV ? env.BOT_KV.put(k, v, ttl ? { expirationTtl: ttl } : undefined) : null,
   };
 }
 
@@ -247,6 +284,98 @@ async function handleComment(ctx, v) {
   }
 }
 
+/* ---------------------------------------------------------------------
+   תגובות באינסטגרם
+--------------------------------------------------------------------- */
+async function handleIgComment(ctx, v, igId) {
+  const id = v.id, message = v.text || '', from = v.from || {};
+  if (!id || !message.trim()) return;
+  if (from.id && from.id === igId) return;                        // תגובה של החשבון עצמו
+  if ((from.username || '').toLowerCase().replace(/[._]/g, '') === 'kubeeliyahu') return;
+  if (await ctx.seen(id)) return;
+  const isReplyInThread = !!v.parent_id;
+  const d = await decide(ctx, { message, fromName: '', isReplyInThread });
+  const short = message.replace(/\s+/g, ' ').slice(0, 90), who = from.username ? '@' + from.username : 'גולש';
+  if (d.action === 'ignore') return;
+  await ctx.markSeen(id);
+  const target = v.parent_id || id;                                // באינסטגרם עונים רק לתגובה ראשית
+  if (d.action === 'stores') {
+    await ctx.log(`📍 אינסטגרם – "איפה קונים" מ${who} "${short}"`);
+    try { await ctx.igReply(target, igShort(d.publicReply)); } catch (e) { await ctx.log(`   ⚠️ התגובה באינסטגרם נכשלה: ${e.message}`); }
+    try { await ctx.replyPrivate(id, cutLines(d.privateReply, 950, `\n...ועוד – הרשימה המלאה עם ניווט: ${STORES_PAGE}`)); } catch (e) { await ctx.log(`   ⚠️ ההודעה הפרטית באינסטגרם נכשלה: ${e.message}`); }
+    return;
+  }
+  if (d.action === 'thanks') {
+    const reply = (from.username ? '@' + from.username + ' ' : '') + d.reply;
+    await ctx.log(`💛 אינסטגרם – מחמאה מ${who} "${short}" → "${d.reply}"`);
+    try { await ctx.igReply(target, reply); } catch (e) { await ctx.log(`   ⚠️ התודה באינסטגרם נכשלה: ${e.message}`); }
+    return;
+  }
+  if (d.action === 'complaint') {
+    const c = { id, postId: v.media && v.media.id, message, fromName: who + ' (אינסטגרם)', fromId: from.id || '', health: d.health, time: Date.now() };
+    let emailed = false;
+    try { await sendComplaintEmail(ctx.env, c); emailed = true; } catch (e) { await ctx.log(`   ⚠️ שליחת המייל נכשלה: ${e.message}`); }
+    c.action = emailed ? 'הוסתרה (אינסטגרם)' : 'הוסתרה (אינסטגרם, המייל לא נשלח – מופיעה בקובץ התלונות)';
+    if (ctx.env.BOT_KV) await ctx.env.BOT_KV.put(`complaint:${new Date(c.time).toISOString()}:${id}`, JSON.stringify(c));
+    try { await ctx.igHide(id); } catch (e) { c.action = 'ההסתרה נכשלה'; await ctx.log(`   ⚠️ ההסתרה באינסטגרם נכשלה: ${e.message}`); }
+    await ctx.log(`${d.health ? '🚨 תלונה – בטיחות מזון' : '⚠️ תלונה'} באינסטגרם מ${who} "${short}" → ${c.action}`);
+  }
+}
+function cutLines(text, max, tail) {
+  if (text.length <= max) return text;
+  const out = []; let len = tail.length;
+  for (const ln of text.split('\n')) { if (len + ln.length + 1 > max) break; out.push(ln); len += ln.length + 1; }
+  return out.join('\n') + tail;
+}
+// באינסטגרם קישורים בתגובה לא לחיצים – תשובה קצרה, הרשימה המלאה נשלחת בהודעה פרטית
+function igShort(text) {
+  return text.replace(/\n\nכל נקודות המכירה[^\n]*$/, '\nכל נקודות המכירה – בקישור בביו 🔗').replace(/שלחנו לך את כולם בהודעה פרטית/, 'שלחנו לך את כולם בדיירקט');
+}
+
+/* ---------------------------------------------------------------------
+   הודעות לאינבוקס – מסנג'ר ואינסטגרם דיירקט
+   אם מישהו מהצוות כתב בשיחה ב-12 השעות האחרונות – הבוט שותק.
+--------------------------------------------------------------------- */
+async function handleMessage(ctx, ev, platform, ownId) {
+  const m = ev.message;
+  if (!m || !ev.sender) return;
+  const where = platform === 'ig' ? 'אינסטגרם' : 'מסנג׳ר';
+  if (m.is_echo) {                                                  // הודעה שיצאה מהעמוד
+    if (String(m.app_id || '') !== APP_ID && ev.recipient) await ctx.kvPut('human:' + ev.recipient.id, '1', 12 * 3600);
+    return;
+  }
+  const userId = ev.sender.id;
+  if (userId === ownId || userId === ctx.env.PAGE_ID || OWN_IDS.includes(userId)) return;
+  const text = (m.text || '').trim();
+  if (!text || !m.mid) return;
+  if (await ctx.seen(m.mid)) return;
+  await ctx.markSeen(m.mid);
+  const short = text.replace(/\s+/g, ' ').slice(0, 90);
+  if (await ctx.kvGet('human:' + userId)) { await ctx.log(`💬 ${where}: "${short}" – נציג כבר בשיחה, הבוט לא עונה`); return; }
+  const lastKey = 'dmlast:' + userId;
+  const d = await decide(ctx, { message: text, fromName: '', isReplyInThread: !!(await ctx.kvGet(lastKey)) });
+  if (d.action === 'ignore') { await ctx.log(`💬 ${where}: "${short}" – לא עונה (${d.why || 'לא שאלה על חנויות/מחמאה'})`); return; }
+  if (d.action === 'stores') {
+    await ctx.log(`📍 ${where} – "איפה קונים": "${short}"`);
+    await ctx.kvPut(lastKey, '1', 2 * 3600);
+    try { await ctx.sendDm(userId, d.kind === 'כללי' ? d.publicReply.replace('כתבו לנו כאן', 'כתבו לנו') : d.privateReply); } catch (e) { await ctx.log(`   ⚠️ שליחת ההודעה נכשלה: ${e.message}`); }
+    return;
+  }
+  if (d.action === 'thanks') {
+    await ctx.log(`💛 ${where} – מחמאה: "${short}" → "${d.reply}"`);
+    try { await ctx.sendDm(userId, d.reply); } catch (e) { await ctx.log(`   ⚠️ שליחת ההודעה נכשלה: ${e.message}`); }
+    return;
+  }
+  if (d.action === 'complaint') {
+    const c = { id: m.mid, postId: '', message: text, fromName: `הודעה ב${where}`, fromId: userId, health: d.health, time: ev.timestamp || Date.now() };
+    let emailed = false;
+    try { await sendComplaintEmail(ctx.env, c); emailed = true; } catch (e) { await ctx.log(`   ⚠️ שליחת המייל נכשלה: ${e.message}`); }
+    c.action = `הודעה פרטית ב${where} – לא נענתה${emailed ? '' : ' (המייל לא נשלח)'}`;
+    if (ctx.env.BOT_KV) await ctx.env.BOT_KV.put(`complaint:${new Date(c.time).toISOString()}:${m.mid}`, JSON.stringify(c));
+    await ctx.log(`${d.health ? '🚨 תלונה – בטיחות מזון' : '⚠️ תלונה'} ב${where}: "${short}" → נשמרה בקובץ התלונות, הבוט לא ענה`);
+  }
+}
+
 // ההחלטה מה לעשות (בלי לפרסם כלום) – משמש גם לבדיקה בדפדפן
 const OWN_IDS = ['101459878977921', '100075824275094'];
 function isOwn(env, from) {
@@ -261,7 +390,8 @@ async function decide(ctx, { message, fromName, isReplyInThread }) {
     if (quickSentiment(message) === 'positive') r.publicReply = r.publicReply.replace(/^היי[^!]*! /, m => m + 'תודה רבה ❤️ ');
     return { action: 'stores', ...r };
   }
-  if (MEMORIAL.test(norm(message)) && !isWhereToBuy(message, stores)) return { action: 'ignore', why: 'תנחומים/זיכרון – לא עונים אוטומטית', by: 'זיכרון' };
+  if (MEMORIAL.test(norm(message))) return { action: 'ignore', why: 'תנחומים/זיכרון – לא עונים אוטומטית', by: 'זיכרון' };
+  if (BLESSING.test(norm(message))) return { action: 'ignore', why: 'ברכה/איחולי בריאות – לא עונים', by: 'ברכה' };
   const s = await classify(ctx.env, message, fromName);
   if (s.type === 'negative') return { action: 'complaint', health: s.health || HEALTH.test(norm(message)), by: s.by };
   if (s.type === 'positive') {
@@ -322,7 +452,8 @@ async function setupPost(rawEnv, request, u) {
     } catch (e) { return bad(`קוד הגישה לא עבד (${e.message}). ב-Graph API Explorer לוחצים Generate Access Token, ואז Copy Token, ומדביקים שוב.`); }
   }
   if (!pageToken) return bad('חסר קוד גישה (שדה 2).');
-  await rawEnv.BOT_KV.put('cfg', JSON.stringify({ appSecret, pageToken, savedAt: new Date().toISOString() }));
+  await rawEnv.BOT_KV.put('cfg', JSON.stringify({ ...cfg, appSecret, pageToken, savedAt: new Date().toISOString() }));
+  try { await fetch(`${G}/${rawEnv.PAGE_ID}/subscribed_apps?subscribed_fields=feed,messages,message_echoes&access_token=${encodeURIComponent(pageToken)}`, { method: 'POST' }); } catch {}
   CFG_CACHE = { at: 0, cfg: null };
   const k = encodeURIComponent(key);
   return setupPage(key, `<div style="background:#e6f4ea;padding:14px;border-radius:8px">
@@ -577,7 +708,7 @@ const POSITIVE = /(טעים|טעימה|טעימות|מעולה|מעולים|מו
 const NEGATIVE = /(לא טעים|לא היה טעים|לא ממליץ|לא ממליצה|לא שווה|מאכזב|אכזבה|התאכזב|גרוע|מגעיל|דוחה|התפרק|התפרקו|יקר מדי|יקר מאוד|מחיר מטורף|חבל שקניתי|תלונה|ריקול|הורעל|הרעלה|קלקול|מקולקל|פג תוקף|שרוף|חסר בשר|בלי בשר|רק בצק|לא הגיע|לא עונים|גועל|זוועה|בושה|רמאות|👎|🤮|😡|😠)/;
 const NOT_NEGATIVE = /(לא מאכזב|לא היה מאכזב|בכלל לא גרוע|לא גרוע בכלל|לא מתפרק|לא התפרק|לא התפרקו|לא יקר|בכלל לא יקר|אף פעם לא מאכזב|מעולם לא התאכזב|לא חבל)/g;
 const MEMORIAL = /((^|\s)זל($|\s|[,.!])|זכרונה|זכרונו|זכרה|זכרו לברכה|עליה השלום|עליו השלום|נפטר|נפטרה|הלכה לעולמה|כבר לא איתנו|מתגעגע|מתגעגעת|געגוע|לא תדעו עוד צער|לא תדעי עוד צער|לא תדע עוד צער|תנחומים|משתתפ|ברוך דיין|בדין האמת|💔)/;
-const BLESSING = /(בריאות|אריכות ימים|רפואה שלמה|עד 120|עד מאה ועשרים|ישמור|שומר|ברכה והצלחה|אמן)/;
+const BLESSING = /(בריאות|בריא|אריכות ימים|רפואה שלמה|רפואה|החלמה|תרגישי טוב|תרגיש טוב|עד 120|עד מאה ועשרים|ישמור|שומר עליך|שמירה|ברכה והצלחה|אמן|בעזרת השם|בעזה|שהשם|שהקב|יברך|מזל טוב)/;
 const FOOD = /(טעים|טעימה|קובה|אוכל|בתיאבון|מנה|מרק|אכלנו|אכלתי)/;
 const HEALTH = /(הרעלה|הורעל|הורעלנו|חולה|חלה|חלינו|חליתי|שלשול|הקאות|הקאתי|הקיא|בית חולים|מיון|קלקול קיבה|גוף זר|זכוכית|פלסטיק בתוך|שערה|שיער בתוך|תולעת|חרק|ריח רע|מסריח|מקולקל|רקוב|פג תוקף|ריקול|משרד הבריאות|אלרגי|תגובה אלרגית)/;
 
