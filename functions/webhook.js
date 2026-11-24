@@ -352,7 +352,8 @@ async function backfill(env, request, p) {
   const addTok = u => u + (u.includes('?') ? '&' : '?') + 'access_token=' + tok;
   let postsUrl = `${G}/${env.PAGE_ID}/posts?fields=id,created_time&since=${since}&limit=10&access_token=${tok}`;
   const nx = p.get('next');
-  if (nx && nx.startsWith(G + '/' + env.PAGE_ID + '/posts')) postsUrl = addTok(strip(nx));
+  const base = env.GRAPH_BASE || 'https://graph.facebook.com';
+  if (nx && nx.startsWith(base + '/') && new RegExp('^/v\\d+\\.\\d+/' + env.PAGE_ID + '/posts$').test(new URL(nx).pathname)) postsUrl = addTok(strip(nx));
   try {
     while (postsUrl && budget > 8) {
       const cur = postsUrl;
