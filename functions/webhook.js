@@ -207,7 +207,7 @@ async function handleComment(ctx, v) {
   if (v.item !== 'comment' || v.verb !== 'add') return;
   const { comment_id: id, post_id: postId, parent_id: parentId, message = '', from = {} } = v;
   if (!id || !message.trim()) return;
-  if (from.id && from.id === ctx.env.PAGE_ID) return;            // לא מגיבים לעצמנו
+  if (isOwn(ctx.env, from)) return;            // לא מגיבים לעצמנו
   if (await ctx.seen(id)) return;                                 // כבר טיפלנו
 
   const isReplyInThread = parentId && parentId !== postId;
@@ -248,6 +248,12 @@ async function handleComment(ctx, v) {
 }
 
 // ההחלטה מה לעשות (בלי לפרסם כלום) – משמש גם לבדיקה בדפדפן
+const OWN_IDS = ['101459878977921', '100075824275094'];
+function isOwn(env, from) {
+  if (!from) return false;
+  return (from.id && (from.id === env.PAGE_ID || OWN_IDS.includes(from.id))) || /^קובה אליהו$/.test((from.name || '').trim());
+}
+
 async function decide(ctx, { message, fromName, isReplyInThread }) {
   const stores = ctx.stores;
   if (isWhereToBuy(message, stores) || (isReplyInThread && isCityOnlyReply(message, stores))) {
@@ -255,6 +261,7 @@ async function decide(ctx, { message, fromName, isReplyInThread }) {
     if (quickSentiment(message) === 'positive') r.publicReply = r.publicReply.replace(/^היי[^!]*! /, m => m + 'תודה רבה ❤️ ');
     return { action: 'stores', ...r };
   }
+  if (MEMORIAL.test(norm(message)) && !isWhereToBuy(message, stores)) return { action: 'ignore', why: 'תנחומים/זיכרון – לא עונים אוטומטית', by: 'זיכרון' };
   const s = await classify(ctx.env, message, fromName);
   if (s.type === 'negative') return { action: 'complaint', health: s.health || HEALTH.test(norm(message)), by: s.by };
   if (s.type === 'positive') {
@@ -341,7 +348,11 @@ async function backfill(env, request, p) {
   const stores = await getStores(env, request);
   const out = { dry: isDry, days, done: [], skipped: 0, errors: [], next: null };
   const ctx = makeCtx({ ...env, DRY_RUN: isDry ? 'true' : 'false' }, stores);
-  let postsUrl = p.get('next') || `${G}/${env.PAGE_ID}/posts?fields=id,created_time&since=${since}&limit=10&access_token=${tok}`;
+  const strip = u => u && u.replace(/([?&])access_token=[^&]*&?/, '$1').replace(/[?&]$/, '');
+  const addTok = u => u + (u.includes('?') ? '&' : '?') + 'access_token=' + tok;
+  let postsUrl = `${G}/${env.PAGE_ID}/posts?fields=id,created_time&since=${since}&limit=10&access_token=${tok}`;
+  const nx = p.get('next');
+  if (nx && nx.startsWith(G + '/' + env.PAGE_ID + '/posts')) postsUrl = addTok(strip(nx));
   try {
     while (postsUrl && budget > 8) {
       const cur = postsUrl;
@@ -352,8 +363,8 @@ async function backfill(env, request, p) {
         const cm = await get(`${G}/${post.id}/comments?filter=toplevel&order=chronological&fields=id,message,created_time,from,comments.limit(25){from}&limit=100&access_token=${tok}`);
         for (const c of cm.data || []) {
           if (!c.message || !c.message.trim()) continue;
-          if (c.from && c.from.id === env.PAGE_ID) continue;                          // תגובה של הדף עצמו
-          if ((c.comments && c.comments.data || []).some(r => r.from && r.from.id === env.PAGE_ID)) { out.skipped++; continue; } // כבר ענינו
+          if (isOwn(env, c.from)) continue;                          // תגובה של הדף עצמו
+          if ((c.comments && c.comments.data || []).some(r => isOwn(env, r.from))) { out.skipped++; continue; } // כבר ענינו
           if (await ctx.seen(c.id)) { out.skipped++; continue; }
           const d = await decide(ctx, { message: c.message, fromName: c.from && c.from.name, isReplyInThread: false });
           if (d.action === 'ignore') continue;
@@ -384,6 +395,7 @@ async function backfill(env, request, p) {
     if (!out.next && postsUrl && budget <= 8) out.next = postsUrl;
   } catch (e) { out.errors.push(e.message); }
   await ctx.flushLog();
+  if (out.next) out.next = strip(out.next);
   if (out.next) out.continueUrl = `/webhook?key=${p.get('key')}&view=backfill&days=${days}&dry=${isDry ? 1 : 0}&html=${p.get('html') || 0}&next=${encodeURIComponent(out.next)}`;
   if (p.get('html') !== '1') return json(out);
   // דף שממשיך לבד עד הסוף – לחיצה אחת על קישור
@@ -563,7 +575,9 @@ function buildStoresReply(message, fromName, stores) {
 const POSITIVE = /(טעים|טעימה|טעימות|מעולה|מעולים|מושלם|מושלמת|מדהים|מדהימה|אלופים|אלוף|אלופה|הכי טוב|הכי טעים|ממליץ|ממליצה|ממליצים|שווה|אהבנו|אוהבים|אוהבת|אוהב|כיף|וואו|ואו|פצצה|חלום|גאונים|כל הכבוד|יישר כח|ישר כח|תודה|בתיאבון|נהנינו|כמו של סבתא|כמו של אמא|טעם של בית|קבועים|מכורים|מכורה|מכור|כל שבוע|נשאר כלום|גמרו הכל|נעלם|יאמי|yummy|😍|🤤|❤|♥|💯|👏|🔥|😋|👌|🥰|💪)/;
 const NEGATIVE = /(לא טעים|לא היה טעים|לא ממליץ|לא ממליצה|לא שווה|מאכזב|אכזבה|התאכזב|גרוע|מגעיל|דוחה|התפרק|התפרקו|יקר מדי|יקר מאוד|מחיר מטורף|חבל שקניתי|תלונה|ריקול|הורעל|הרעלה|קלקול|מקולקל|פג תוקף|שרוף|חסר בשר|בלי בשר|רק בצק|לא הגיע|לא עונים|גועל|זוועה|בושה|רמאות|👎|🤮|😡|😠)/;
 const NOT_NEGATIVE = /(לא מאכזב|לא היה מאכזב|בכלל לא גרוע|לא גרוע בכלל|לא מתפרק|לא התפרק|לא התפרקו|לא יקר|בכלל לא יקר|אף פעם לא מאכזב|מעולם לא התאכזב|לא חבל)/g;
-const MEMORIAL = /((^|\s)זל($|\s|[,.!])|זכרונה|זכרונו|זכרה|זכרו לברכה|עליה השלום|עליו השלום|נפטר|נפטרה|הלכה לעולמה|כבר לא איתנו|מתגעגע|מתגעגעת|געגוע)/;
+const MEMORIAL = /((^|\s)זל($|\s|[,.!])|זכרונה|זכרונו|זכרה|זכרו לברכה|עליה השלום|עליו השלום|נפטר|נפטרה|הלכה לעולמה|כבר לא איתנו|מתגעגע|מתגעגעת|געגוע|לא תדעו עוד צער|לא תדעי עוד צער|לא תדע עוד צער|תנחומים|משתתפ|ברוך דיין|בדין האמת|💔)/;
+const BLESSING = /(בריאות|אריכות ימים|רפואה שלמה|עד 120|עד מאה ועשרים|ישמור|שומר|ברכה והצלחה|אמן)/;
+const FOOD = /(טעים|טעימה|קובה|אוכל|בתיאבון|מנה|מרק|אכלנו|אכלתי)/;
 const HEALTH = /(הרעלה|הורעל|הורעלנו|חולה|חלה|חלינו|חליתי|שלשול|הקאות|הקאתי|הקיא|בית חולים|מיון|קלקול קיבה|גוף זר|זכוכית|פלסטיק בתוך|שערה|שיער בתוך|תולעת|חרק|ריח רע|מסריח|מקולקל|רקוב|פג תוקף|ריקול|משרד הבריאות|אלרגי|תגובה אלרגית)/;
 
 function quickSentiment(text) {
@@ -581,7 +595,9 @@ function shortThanks(message, fromName) {
   const fill = x => (first ? x.replace('{n}', first) : x.replace(' {n}', '').replace('{n}', '')).replace(/\s+([,!])/g, '$1');
   if (MEMORIAL.test(t)) return fill('תודה רבה {n} 🤍 יהי זכרה ברוך');
   if (/שבת|שישי/.test(t)) return fill(pick(['תודה רבה {n}, שבת שלום! 🕯️', 'תודה רבה {n}, שבת שלום ובתיאבון 🕯️']));
-  return fill(pick(['תודה רבה {n}! ❤️', 'תודה רבה {n} 🙏', 'תודה רבה {n}, בתיאבון! 😋', 'תודה רבה {n}, שמחים שאהבתם ❤️', 'תודה רבה {n}! 🥰']));
+  if (BLESSING.test(t)) return fill(pick(['תודה רבה {n}, אמן! 🙏', 'תודה רבה {n} ❤️ אמן', 'תודה רבה {n}! 🙏❤️']));
+  if (FOOD.test(t)) return fill(pick(['תודה רבה {n}, בתיאבון! 😋', 'תודה רבה {n}, שמחים שאהבתם ❤️', 'תודה רבה {n}! 😋']));
+  return fill(pick(['תודה רבה {n}! ❤️', 'תודה רבה {n} 🙏', 'תודה רבה {n}! 🥰']));
 }
 
 const CLAUDE_SYSTEM = `את/ה מנהל/ת הקהילה של "קובה אליהו" – קובה ביתית קפואה לפי המתכונים של סבתא אסנת, כשר בשרי מהדרין.
