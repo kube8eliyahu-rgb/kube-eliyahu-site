@@ -208,9 +208,10 @@ async function handleComment(ctx, v) {
     let emailed = false;
     try { await sendComplaintEmail(ctx.env, c); emailed = true; }
     catch (e) { await ctx.log(`   ⚠️ שליחת המייל נכשלה: ${e.message}`); }
-    c.action = emailed ? 'הוסתרה' : 'נשארה גלויה (המייל נכשל)';
+    // התלונה נשמרת תמיד בקובץ התלונות, ולכן מסתירים גם אם המייל לא יצא
+    c.action = emailed ? 'הוסתרה' : 'הוסתרה (המייל לא נשלח – מופיעה בקובץ התלונות)';
     if (ctx.env.BOT_KV) await ctx.env.BOT_KV.put(`complaint:${new Date(c.time).toISOString()}:${id}`, JSON.stringify(c));
-    if (emailed) { try { await ctx.hide(id); } catch (e) { c.action = 'ההסתרה נכשלה'; await ctx.log(`   ⚠️ ההסתרה נכשלה: ${e.message}`); } }
+    try { await ctx.hide(id); } catch (e) { c.action = 'ההסתרה נכשלה'; await ctx.log(`   ⚠️ ההסתרה נכשלה: ${e.message}`); }
     await ctx.log(`${d.health ? '🚨 תלונה – בטיחות מזון' : '⚠️ תלונה'} מ${from.name || 'גולש'} "${short}" → מייל: ${emailed ? 'נשלח' : 'לא נשלח'} | ${c.action}`);
   }
 }
@@ -291,8 +292,20 @@ async function backfill(env, request, p) {
     if (!out.next && postsUrl && budget <= 8) out.next = postsUrl;
   } catch (e) { out.errors.push(e.message); }
   await ctx.flushLog();
-  if (out.next) out.continueUrl = `/webhook?key=${p.get('key')}&view=backfill&days=${days}&dry=${isDry ? 1 : 0}&next=${encodeURIComponent(out.next)}`;
-  return json(out);
+  if (out.next) out.continueUrl = `/webhook?key=${p.get('key')}&view=backfill&days=${days}&dry=${isDry ? 1 : 0}&html=${p.get('html') || 0}&next=${encodeURIComponent(out.next)}`;
+  if (p.get('html') !== '1') return json(out);
+  // דף שממשיך לבד עד הסוף – לחיצה אחת על קישור
+  const esc2 = t => String(t || '').replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+  const label = { stores: '📍 נקודות מכירה', thanks: '💛 תודה', complaint: '⚠️ תלונה – הוסתרה' };
+  const rows = out.done.map(x => `<tr><td>${x.date}</td><td>${esc2(x.from)}</td><td>${esc2(x.text)}</td><td>${label[x.action] || x.action}</td></tr>`).join('');
+  const html = `<!doctype html><html dir="rtl" lang="he"><meta charset="utf-8"><title>מענה לתגובות מהעבר</title>
+${out.continueUrl ? `<meta http-equiv="refresh" content="1;url=${out.continueUrl}">` : ''}
+<body style="font-family:Arial,sans-serif;max-width:900px;margin:30px auto;padding:0 16px">
+<h2>${out.continueUrl ? '⏳ ממשיך לעבור על תגובות… (לא לסגור את הדף)' : '✅ סיימנו לעבור על התגובות מהעבר'}</h2>
+<p>${isDry ? 'מצב תצוגה בלבד – לא פורסם כלום.' : 'הבוט ענה על התגובות שבטבלה.'} בסבב הזה: ${out.done.length} תגובות טופלו, ${out.skipped} דולגו (כבר נענו).</p>
+${out.errors.length ? `<p style="color:#b42318">שגיאות: ${esc2(out.errors.join(' | '))}</p>` : ''}
+<table border="1" cellpadding="6" style="border-collapse:collapse;width:100%"><tr><th>תאריך</th><th>מי</th><th>תגובה</th><th>מה הבוט עשה</th></tr>${rows}</table></body></html>`;
+  return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
 /* ---------------------------------------------------------------------
