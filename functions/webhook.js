@@ -24,13 +24,40 @@
 import { connect } from 'cloudflare:sockets';
 
 const GRAPH_VERSION = 'v23.0';
+const APP_ID = '2582321285609364';
+
+// קודים שנשמרו דרך דף ההגדרה (KV) גוברים על ההגדרות ב-Cloudflare
+let CFG_CACHE = { at: 0, cfg: null };
+async function withCfg(env) {
+  if (!env.BOT_KV) return env;
+  if (!CFG_CACHE.cfg || Date.now() - CFG_CACHE.at > 60000) {
+    try { CFG_CACHE = { at: Date.now(), cfg: JSON.parse((await env.BOT_KV.get('cfg')) || '{}'), tried: CFG_CACHE.tried }; } catch { CFG_CACHE = { at: Date.now(), cfg: {}, tried: CFG_CACHE.tried }; }
+  }
+  const c = CFG_CACHE.cfg || {};
+  // אם בהגדרות נשמר קוד משתמש (ולא קוד דף) – הבוט שולף ממנו לבד את קוד הדף הקבוע ושומר
+  if (!c.pageToken && env.PAGE_ACCESS_TOKEN && !CFG_CACHE.tried) {
+    CFG_CACHE.tried = true;
+    try {
+      const t = String(env.PAGE_ACCESS_TOKEN).trim();
+      const r = await fetch(`${env.GRAPH_BASE || 'https://graph.facebook.com'}/${GRAPH_VERSION}/${env.PAGE_ID}?fields=access_token&access_token=${encodeURIComponent(t)}`);
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.access_token && j.access_token !== t) {
+        c.pageToken = j.access_token; c.resolvedAt = new Date().toISOString();
+        await env.BOT_KV.put('cfg', JSON.stringify(c));
+        CFG_CACHE = { at: Date.now(), cfg: c, tried: true };
+      }
+    } catch {}
+  }
+  return { ...env, APP_SECRET: c.appSecret || env.APP_SECRET, PAGE_ACCESS_TOKEN: c.pageToken || env.PAGE_ACCESS_TOKEN };
+}
 const STORES_PAGE = 'https://kubeeliyahu.com/where.html';
 const MAX_PUBLIC = 6;
 
 /* ---------------------------------------------------------------------
    HTTP
 --------------------------------------------------------------------- */
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env: rawEnv }) {
+  const env = await withCfg(rawEnv);
   const url = new URL(request.url);
   const p = url.searchParams;
 
@@ -49,6 +76,7 @@ export async function onRequestGet({ request, env }) {
       catch (e) { return json({ ok: false, error: e.message }); }
     }
     if (view === 'backfill') return backfill(env, request, p);
+    if (view === 'setup') return setupPage(p.get('key'), '');
     if (view === 'check') {
       // בדיקת חיבור לפייסבוק – בלי לחשוף את הקוד עצמו
       const G = `${env.GRAPH_BASE || "https://graph.facebook.com"}/${GRAPH_VERSION}`, t = encodeURIComponent(String(env.PAGE_ACCESS_TOKEN || '').trim());
@@ -83,7 +111,10 @@ export async function onRequestGet({ request, env }) {
 }
 
 export async function onRequestPost(context) {
-  const { request, env } = context;
+  const { request } = context;
+  const env = await withCfg(context.env);
+  const u = new URL(request.url);
+  if (u.searchParams.get('view') === 'setup') return setupPost(context.env, request, u);
   const raw = await request.arrayBuffer();
   if (!(await validSignature(env, request, raw))) {
     // רושמים ביומן כדי שיהיה ברור מה קרה (בלי לחשוף את הקוד)
@@ -231,6 +262,67 @@ async function decide(ctx, { message, fromName, isReplyInThread }) {
     return { action: 'thanks', reply: s.reply, by: s.by };
   }
   return { action: 'ignore', type: s.type, by: s.by };
+}
+
+/* ---------------------------------------------------------------------
+   דף הגדרה: /webhook?key=REPORT_KEY&view=setup
+   מדביקים את הקוד הסודי של האפליקציה ואת קוד הגישה מ-Graph API Explorer.
+   הבוט בודק אותם, הופך את קוד הדף לקבוע ושומר – בלי לפרסם מחדש את האתר.
+--------------------------------------------------------------------- */
+function setupPage(key, msg) {
+  const html = `<!doctype html><html dir="rtl" lang="he"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>הגדרת הבוט</title>
+<body style="font-family:Arial,sans-serif;max-width:640px;margin:30px auto;padding:0 16px;line-height:1.6">
+<h2>הגדרת הבוט של קובה אליהו</h2>
+${msg}
+<form method="post" action="/webhook?key=${encodeURIComponent(key || '')}&view=setup">
+<p><b>1. הקוד הסודי של האפליקציה</b> (App secret – 32 תווים)<br>
+<input name="secret" autocomplete="off" style="width:100%;padding:10px;font-size:16px" dir="ltr"></p>
+<p><b>2. קוד הגישה</b> מ-Graph API Explorer (מתחיל ב-EAA)<br>
+<textarea name="token" rows="4" style="width:100%;padding:10px;font-size:14px" dir="ltr"></textarea></p>
+<button style="background:#1b5e3b;color:#fff;border:0;padding:12px 28px;font-size:18px;border-radius:8px">שמירה ובדיקה</button>
+</form></body></html>`;
+  return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
+}
+
+async function setupPost(rawEnv, request, u) {
+  const key = u.searchParams.get('key');
+  if (!rawEnv.REPORT_KEY || key !== String(rawEnv.REPORT_KEY).trim()) return new Response('forbidden', { status: 403 });
+  const form = await request.formData();
+  const secret = String(form.get('secret') || '').trim();
+  const token = String(form.get('token') || '').replace(/\s+/g, '');
+  const G = `${rawEnv.GRAPH_BASE || 'https://graph.facebook.com'}/${GRAPH_VERSION}`;
+  const get = async url => { const r = await fetch(url); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error((j.error && j.error.message) || r.status); return j; };
+  const bad = m => setupPage(key, `<p style="background:#fde8e8;padding:12px;border-radius:8px">❌ ${m}</p>`);
+  const cfg = JSON.parse((rawEnv.BOT_KV && await rawEnv.BOT_KV.get('cfg')) || '{}');
+  const appSecret = secret || cfg.appSecret || String(rawEnv.APP_SECRET || '').trim();
+  // בדיקת הקוד הסודי
+  try { await get(`${G}/oauth/access_token?client_id=${APP_ID}&client_secret=${encodeURIComponent(appSecret)}&grant_type=client_credentials`); }
+  catch (e) { return bad(`הקוד הסודי של האפליקציה לא נכון (${e.message}). מעתיקים אותו שוב מ-App settings → Basic → App secret → Show.`); }
+  let pageToken = cfg.pageToken || '', pageName = '', permanent = false;
+  if (token) {
+    try {
+      // קוד משתמש → קוד ארוך → קוד דף קבוע
+      let userTok = token;
+      try { const ex = await get(`${G}/oauth/access_token?grant_type=fb_exchange_token&client_id=${APP_ID}&client_secret=${encodeURIComponent(appSecret)}&fb_exchange_token=${encodeURIComponent(token)}`); userTok = ex.access_token || token; } catch {}
+      const pg = await get(`${G}/${rawEnv.PAGE_ID}?fields=name,access_token&access_token=${encodeURIComponent(userTok)}`);
+      pageToken = pg.access_token || token; pageName = pg.name || '';
+      const dbg = await get(`${G}/debug_token?input_token=${encodeURIComponent(pageToken)}&access_token=${APP_ID}|${encodeURIComponent(appSecret)}`);
+      permanent = dbg.data && (dbg.data.expires_at === 0 || !dbg.data.expires_at);
+      const scopes = (dbg.data && dbg.data.scopes) || [];
+      const need = ['pages_manage_engagement', 'pages_read_user_content', 'pages_read_engagement'];
+      const missing = need.filter(x => !scopes.includes(x));
+      if (missing.length) return bad(`לקוד הגישה חסרות הרשאות: ${missing.join(', ')}. ב-Graph API Explorer מסמנים אותן ולוחצים Generate Access Token שוב.`);
+    } catch (e) { return bad(`קוד הגישה לא עבד (${e.message}). ב-Graph API Explorer לוחצים Generate Access Token, ואז Copy Token, ומדביקים שוב.`); }
+  }
+  if (!pageToken) return bad('חסר קוד גישה (שדה 2).');
+  await rawEnv.BOT_KV.put('cfg', JSON.stringify({ appSecret, pageToken, savedAt: new Date().toISOString() }));
+  CFG_CACHE = { at: 0, cfg: null };
+  const k = encodeURIComponent(key);
+  return setupPage(key, `<div style="background:#e6f4ea;padding:14px;border-radius:8px">
+<b>✅ הכול מחובר!</b><br>הדף: ${pageName || 'קובה אליהו'} · קוד הגישה: ${permanent ? 'קבוע – לא יפוג' : 'נשמר'} · הקוד הסודי: תקין<br>
+מעכשיו הבוט עונה לתגובות חדשות בפייסבוק.<br><br>
+<a href="/webhook?key=${k}&view=backfill&days=365&dry=0&html=1" style="background:#1b5e3b;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">לענות עכשיו על כל התגובות מהשנה האחרונה ←</a>
+<br><br><a href="/webhook?key=${k}&view=backfill&days=365&dry=1&html=1">או קודם לראות מה הבוט יענה (בלי לפרסם)</a></div>`);
 }
 
 /* ---------------------------------------------------------------------
