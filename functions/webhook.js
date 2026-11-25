@@ -582,6 +582,7 @@ async function igBackfill(env, request, p) {
       url = (media.paging && media.paging.next) ? `${G}/${ig.id}/media?fields=id,timestamp&limit=20&access_token=${tok}&after=${after}` : null;
       for (const m of media.data || []) {
         if (Date.parse(m.timestamp) < sinceMs) { stop = true; url = null; break; }
+        if (!isDry && await ctx.kvGet('igdone:' + m.id)) continue;      // פוסט שכבר עברנו עליו במלואו
         if (budget < 6) { out.errors.push('נעצר באמצע – להריץ שוב'); stop = true; url = null; break; }
         const cm = await get(`${G}/${m.id}/comments?fields=id,text,timestamp,username,from{id,username},replies{id,username,from{id}}&limit=50&access_token=${tok}`);
         for (const c of cm.data || []) {
@@ -609,6 +610,7 @@ async function igBackfill(env, request, p) {
           } catch (e) { out.errors.push(`${c.id}: ${e.message}`); }
         }
         if (stop) break;
+        if (!isDry) await ctx.kvPut('igdone:' + m.id, '1', 3 * 86400);
       }
       if (url && budget <= 8) { out.next = after; url = null; }
     }
