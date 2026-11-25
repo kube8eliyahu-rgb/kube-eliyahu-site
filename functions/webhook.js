@@ -72,7 +72,12 @@ export async function onRequestGet({ request, env: rawEnv }) {
     const view = p.get('view') || 'log';
     if (view === 'complaints') return complaintsCsvResponse(env);
     if (view === 'mailtest') {
-      try { await sendViaFormSubmit(env, '✅ בדיקה: הבוט של קובה אליהו מחובר למייל', { 'הודעה': 'זו הודעת בדיקה. מעכשיו תלונות מהפייסבוק יגיעו לכאן.', 'קובץ כל התלונות (אקסל)': complaintsLink(env) }); return json({ ok: true }); }
+      try {
+        if (env.SMTP_USER && env.SMTP_PASS) {
+          await sendComplaintEmail(env, { id: 'test', postId: '', message: 'זו הודעת בדיקה מהבוט – מעכשיו כל תלונה מפייסבוק ואינסטגרם תגיע לכאן עם קובץ.', fromName: 'בדיקת מערכת', health: false, time: Date.now(), action: 'בדיקה' });
+          return json({ ok: true, via: 'gmail' });
+        }
+        await sendViaFormSubmit(env, '✅ בדיקה: הבוט של קובה אליהו מחובר למייל', { 'הודעה': 'זו הודעת בדיקה. מעכשיו תלונות מהפייסבוק יגיעו לכאן.', 'קובץ כל התלונות (אקסל)': complaintsLink(env) }); return json({ ok: true, via: 'formsubmit' }); }
       catch (e) { return json({ ok: false, error: e.message }); }
     }
     if (view === 'backfill') return backfill(env, request, p);
