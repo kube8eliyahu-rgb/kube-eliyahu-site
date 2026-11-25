@@ -487,14 +487,19 @@ async function backfill(env, request, p) {
   const nx = p.get('next');
   const base = env.GRAPH_BASE || 'https://graph.facebook.com';
   if (nx && nx.startsWith(base + '/') && new RegExp('^/v\\d+\\.\\d+/' + env.PAGE_ID + '/posts$').test(new URL(nx).pathname)) postsUrl = addTok(strip(nx));
+  // פוסטים מסוימים (למשל מודעות, שלא מופיעים ברשימת הפוסטים): &posts=<id>,<id>
+  const only = (p.get('posts') || '').split(',').map(x => x.trim()).filter(x => /^[A-Za-z0-9_]+$/.test(x)).slice(0, 10);
+  if (only.length) postsUrl = 'only';
   try {
     while (postsUrl && budget > 8) {
       const cur = postsUrl;
-      const posts = await get(postsUrl);
-      postsUrl = (posts.paging && posts.paging.next) || null;
+      const posts = postsUrl === 'only' ? { data: only.map(id => ({ id })) } : await get(postsUrl);
+      if (postsUrl === 'only') { postsUrl = null; budget = Math.max(budget, 30); }
+      if (cur !== 'only') postsUrl = (posts.paging && posts.paging.next) || null;
       for (const post of posts.data || []) {
-        if (budget < 6) { out.next = cur; break; }        // ממשיכים מאותו עמוד – מה שכבר טופל ידולג
-        const cm = await get(`${G}/${post.id}/comments?filter=toplevel&order=chronological&fields=id,message,created_time,from,comments.limit(25){from}&limit=100&access_token=${tok}`);
+        if (budget < 6) { out.next = cur === 'only' ? null : cur; if (cur === 'only') out.errors.push('נעצר באמצע – להריץ שוב'); break; }        // ממשיכים מאותו עמוד – מה שכבר טופל ידולג
+        const cm = await get(`${G}/${post.id}/comments?filter=toplevel&order=reverse_chronological&fields=id,message,created_time,from,comments.limit(25){from}&limit=100&access_token=${tok}`);
+        for (let pg = cm, n = 0; pg.paging && pg.paging.next && n < 4 && budget > 10; n++) { pg = await get(pg.paging.next); cm.data = (cm.data || []).concat(pg.data || []); }
         for (const c of cm.data || []) {
           if (!c.message || !c.message.trim()) continue;
           if (isOwn(env, c.from)) continue;                          // תגובה של הדף עצמו
@@ -624,11 +629,13 @@ async function cleanupBlessings(env, p) {
   const nx = p.get('next');
   if (nx && nx.startsWith('https://graph.facebook.com/') && new RegExp('^/v\\d+\\.\\d+/' + env.PAGE_ID + '/posts$').test(new URL(nx).pathname)) url = nx.replace(/([?&])access_token=[^&]*&?/, '$1').replace(/[?&]$/, '') + '&access_token=' + tok;
   try {
+    let cur = null;
     while (url && budget > 6) {
+      cur = url;
       const posts = await get(url);
       url = (posts.paging && posts.paging.next) || null;
       for (const post of posts.data || []) {
-        if (budget < 4) { out.errors.push('נעצר באמצע – להריץ שוב'); url = null; break; }
+        if (budget < 4) { url = cur; break; }
         const cm = await get(`${G}/${post.id}/comments?filter=toplevel&fields=id,message,comments.limit(50){id,from,message,created_time}&limit=100&access_token=${tok}`);
         for (const c of cm.data || []) {
           const t = norm(c.message || '');
@@ -644,7 +651,9 @@ async function cleanupBlessings(env, p) {
             catch (e) { out.errors.push(e.message); }
           }
         }
+        if (url === cur) break;
       }
+      if (url === cur) break;
     }
     if (url) out.next = url.replace(/([?&])access_token=[^&]*&?/, '$1').replace(/[?&]$/, '');
   } catch (e) { out.errors.push(e.message); }
