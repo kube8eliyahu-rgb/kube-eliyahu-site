@@ -652,7 +652,9 @@ function isWhereToBuy(text, stores) {
   const t = norm(text);
   if (!t) return false;
   if (INTENT_PATTERNS.some(p => p.test(t))) return true;
-  return t.length < 40 && /^(יש|יש גם|גם|ו?מה עם|מגיע|מגיעים|נמכר|מוכרים)\s?(ב|ל)/.test(t) && !!findCity(t, stores);
+  if (t.length < 40 && /^(יש|יש גם|גם|ו?מה עם|מגיע|מגיעים|נמכר|מוכרים)\s?(ב|ל)/.test(t) && !!findCity(t, stores)) return true;
+  // "באשקלון אתם מוכרים?" / "בחיפה יש?" – עיר + מילת קנייה, בשאלה קצרה
+  return t.length < 60 && /(מוכרים|מוכר|נמכר|נמכרים|יש לכם|יש\?|יש$|משיגים|אפשר להשיג|אפשר לקנות|קונים|מגיעים|מגיע)/.test(t) && !!findCity(t, stores);
 }
 
 function isCityOnlyReply(text, stores) {
