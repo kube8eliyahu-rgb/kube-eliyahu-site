@@ -484,10 +484,11 @@ async function backfill(env, request, p) {
   const ctx = makeCtx({ ...env, DRY_RUN: isDry ? 'true' : 'false' }, stores);
   const strip = u => u && u.replace(/([?&])access_token=[^&]*&?/, '$1').replace(/[?&]$/, '');
   const addTok = u => u + (u.includes('?') ? '&' : '?') + 'access_token=' + tok;
-  let postsUrl = `${G}/${env.PAGE_ID}/posts?fields=id,created_time&since=${since}&limit=10&access_token=${tok}`;
+  const edge = p.get('ads') === '1' ? 'ads_posts' : 'posts';                // ads=1 – פרסומים ממומנים
+  let postsUrl = `${G}/${env.PAGE_ID}/${edge}?fields=id,created_time&since=${since}&limit=10${edge === 'ads_posts' ? '&include_inline_create=true' : ''}&access_token=${tok}`;
   const nx = p.get('next');
   const base = env.GRAPH_BASE || 'https://graph.facebook.com';
-  if (nx && nx.startsWith(base + '/') && new RegExp('^/v\\d+\\.\\d+/' + env.PAGE_ID + '/posts$').test(new URL(nx).pathname)) postsUrl = addTok(strip(nx));
+  if (nx && nx.startsWith(base + '/') && new RegExp('^/v\\d+\\.\\d+/' + env.PAGE_ID + '/(posts|ads_posts)$').test(new URL(nx).pathname)) postsUrl = addTok(strip(nx));
   // פוסטים מסוימים (למשל מודעות, שלא מופיעים ברשימת הפוסטים): &posts=<id>,<id>
   const only = (p.get('posts') || '').split(',').map(x => x.trim()).filter(x => /^[A-Za-z0-9_]+$/.test(x)).slice(0, 10);
   if (only.length) postsUrl = 'only';
@@ -538,7 +539,7 @@ async function backfill(env, request, p) {
   } catch (e) { out.errors.push(e.message); }
   await ctx.flushLog();
   if (out.next) out.next = strip(out.next);
-  if (out.next) out.continueUrl = `/webhook?key=${p.get('key')}&view=backfill&days=${days}&dry=${isDry ? 1 : 0}&html=${p.get('html') || 0}&next=${encodeURIComponent(out.next)}`;
+  if (out.next) out.continueUrl = `/webhook?key=${p.get('key')}&view=backfill&days=${days}&dry=${isDry ? 1 : 0}&html=${p.get('html') || 0}${edge === 'ads_posts' ? '&ads=1' : ''}&next=${encodeURIComponent(out.next)}`;
   if (p.get('html') !== '1') return json(out);
   // דף שממשיך לבד עד הסוף – לחיצה אחת על קישור
   const esc2 = t => String(t || '').replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
