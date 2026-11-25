@@ -513,6 +513,7 @@ async function backfill(env, request, p) {
           if (isDry) continue;
           if (budget < 4) { out.next = null; out.errors.push('נעצר באמצע – להריץ שוב'); break; }
           await ctx.markSeen(c.id);
+          await new Promise(r => setTimeout(r, 2500));                 // הפסקה בין תגובות – שלא ייראה כמו ספאם
           try {
             if (d.action === 'stores') {
               budget--; await ctx.replyPublic(c.id, d.publicReply);
@@ -592,6 +593,7 @@ async function igBackfill(env, request, p) {
           if (isDry) continue;
           if (budget < 3) { out.errors.push('נעצר באמצע – להריץ שוב'); stop = true; url = null; break; }
           await ctx.markSeen(c.id);
+          await new Promise(r => setTimeout(r, 2500));
           try {
             if (d.action === 'stores' || d.action === 'thanks') { budget--; await ctx.igReply(c.id, reply); }
             else if (d.action === 'complaint') {
@@ -705,7 +707,7 @@ const REGION_OF = {"ירושלים": "ירושלים והסביבה", "קריי�
 --------------------------------------------------------------------- */
 const norm = t => (t || '').replace(/[֑-ׇ]/g, '').replace(/[״"׳'`]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
 
-const WHERE = '(איפה|היכן|מאיפה|איפא|איפ|באיזה|באיזו|באילו|איזה חנות|איזו חנות|where)';
+const WHERE = '(איפה|היכן|מאיפה|איפא|איפ|אפוא|אפה|באיזה|באיזו|באילו|איזה חנות|איזו חנות|where)';
 const BUY = '(קונים|קונה|לקנות|אקנה|רוכשים|לרכוש|ארכוש|רכישה|משיגים|להשיג|אשיג|נמכר|נמכרים|נמכרת|מוכרים|מוכר|למצוא|מוצאים|אמצא|מצאתי|יש|ניתן|אפשר|buy|get)';
 const INTENT_PATTERNS = [
   new RegExp(`${WHERE}.{0,40}${BUY}`),
@@ -769,6 +771,8 @@ function isWhereToBuy(text, stores) {
   const t = norm(text);
   if (!t) return false;
   if (INTENT_PATTERNS.some(p => p.test(t))) return true;
+  if (t.length < 80 && new RegExp(WHERE).test(t) && findCity(t, stores)) return true;
+  if (/(המקום הכי קרוב|אם יש באזור|אם יש באיזור|יש באזור|יש באיזור)/.test(t)) return true;
   if (t.length < 40 && /^(יש|יש גם|גם|ו?מה עם|מגיע|מגיעים|נמכר|מוכרים)\s?(ב|ל)/.test(t) && !!findCity(t, stores)) return true;
   // "באשקלון אתם מוכרים?" / "בחיפה יש?" – עיר + מילת קנייה, בשאלה קצרה
   return t.length < 60 && /(מוכרים|מוכר|נמכר|נמכרים|יש לכם|יש\?|יש$|משיגים|אפשר להשיג|אפשר לקנות|קונים|מגיעים|מגיע)/.test(t) && !!findCity(t, stores);
@@ -831,10 +835,15 @@ const BLESSING = /(בריאות|בריא|אריכות ימים|רפואה שלמ
 const FOOD = /(טעים|טעימה|קובה|אוכל|בתיאבון|מנה|מרק|אכלנו|אכלתי)/;
 const HEALTH = /(הרעלה|הורעל|הורעלנו|חולה|חלה|חלינו|חליתי|שלשול|הקאות|הקאתי|הקיא|בית חולים|מיון|קלקול קיבה|גוף זר|זכוכית|פלסטיק בתוך|שערה|שיער בתוך|תולעת|חרק|ריח רע|מסריח|מקולקל|רקוב|פג תוקף|ריקול|משרד הבריאות|אלרגי|תגובה אלרגית)/;
 
+const QUESTION = /(\?|האם|השאלה|שאלתי|אשמח לדעת|אפשר לדעת|למה|כמה|מתי|איך|מה המחיר|מה העלות)/;
+const PRICE = /(מחיר|המחיר|מחירים|עלות|העלות|כמה עולה|יקר|זול|שקל|₪|משלוח|מישלוח)/;
+const SOFT_NEGATIVE = /(לצערי|מלוח|מלוחה|נשפך|נשפכה|התאכזבתי|התאכזבנו|לא הצליח|יצא יבש|תפל|חבל ש)/;
 function quickSentiment(text) {
   const t = norm(text).replace(NOT_NEGATIVE, ' ');
   if (!t.trim()) return 'other';
-  if (NEGATIVE.test(t)) return 'negative';
+  const isQ = QUESTION.test(t) || QUESTION.test(text || '');
+  if (NEGATIVE.test(t) || SOFT_NEGATIVE.test(t)) return isQ && !/(לא טעים|מאכזב|התאכזב|גרוע|מלוח|תלונה)/.test(t) ? 'question' : 'negative';
+  if (isQ || PRICE.test(t)) return 'question';                     // שאלות ומחירים – משאירים לצוות
   if (POSITIVE.test(t) || POSITIVE.test(text || '')) return 'positive';
   if (MEMORIAL.test(t) && /סבתא|אמא|אימא|הזכיר|מזכיר|טעם/.test(t)) return 'positive';
   return 'other';
