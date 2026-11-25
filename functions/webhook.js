@@ -499,7 +499,7 @@ async function backfill(env, request, p) {
       if (cur !== 'only') postsUrl = (posts.paging && posts.paging.next) || null;
       for (const post of posts.data || []) {
         if (budget < 6) { out.next = cur === 'only' ? null : cur; if (cur === 'only') out.errors.push('נעצר באמצע – להריץ שוב'); break; }        // ממשיכים מאותו עמוד – מה שכבר טופל ידולג
-        const cm = await get(`${G}/${post.id}/comments?filter=toplevel&order=reverse_chronological&fields=id,message,created_time,from,comments.limit(25){from}&limit=100&access_token=${tok}`);
+        const cm = await get(`${G}/${post.id}/comments?filter=toplevel&order=${p.get('oldest') === '1' ? 'chronological' : 'reverse_chronological'}&fields=id,message,created_time,from,comments.limit(25){from}&limit=100&access_token=${tok}`);
         for (let pg = cm, n = 0; pg.paging && pg.paging.next && n < 4 && budget > 10; n++) { pg = await get(pg.paging.next); cm.data = (cm.data || []).concat(pg.data || []); }
         for (const c of cm.data || []) {
           if (!c.message || !c.message.trim()) continue;
