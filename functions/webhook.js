@@ -477,6 +477,7 @@ async function backfill(env, request, p) {
   const isDry = p.get('dry') !== '0';
   const since = Math.floor(Date.now() / 1000) - days * 86400;
   let budget = 40;                                   // מגבלת בקשות לכל קריאה
+  let acted = 0; const maxActs = Math.min(Number(p.get('max') || 10), 15);   // קלאודפלייר מנתק בקשה אחרי ~100 שניות
   const get = async url => { budget--; const r = await fetch(url); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(JSON.stringify(j.error || r.status).slice(0, 300)); return j; };
   const stores = await getStores(env, request);
   const out = { dry: isDry, days, done: [], skipped: 0, errors: [], next: null };
@@ -504,14 +505,15 @@ async function backfill(env, request, p) {
           if (!c.message || !c.message.trim()) continue;
           if (isOwn(env, c.from)) continue;                          // תגובה של הדף עצמו
           if ((c.comments && c.comments.data || []).some(r => isOwn(env, r.from))) { out.skipped++; continue; } // כבר ענינו
-          if (await ctx.seen(c.id)) { out.skipped++; continue; }
           const d = await decide(ctx, { message: c.message, fromName: c.from && c.from.name, isReplyInThread: false });
           if (d.action === 'ignore') continue;
+          if (d.action === 'complaint' && await ctx.seen(c.id)) { out.skipped++; continue; }
           const ageDays = (Date.now() - new Date(c.created_time).getTime()) / 86400000;
           const item = { id: c.id, date: c.created_time.slice(0, 10), from: c.from ? c.from.name : '', text: c.message.slice(0, 120), action: d.action, reply: d.publicReply || d.reply || '' };
           out.done.push(item);
           if (isDry) continue;
-          if (budget < 4) { out.next = null; out.errors.push('נעצר באמצע – להריץ שוב'); break; }
+          if (budget < 4 || acted >= maxActs) { out.next = cur === 'only' ? null : cur; out.errors.push('נעצר באמצע – להריץ שוב'); budget = 0; break; }
+          acted++;
           await ctx.markSeen(c.id);
           await new Promise(r => setTimeout(r, 2500));                 // הפסקה בין תגובות – שלא ייראה כמו ספאם
           try {
@@ -560,7 +562,7 @@ async function igBackfill(env, request, p) {
   const tok = encodeURIComponent(String(env.PAGE_ACCESS_TOKEN || '').trim());
   const isDry = p.get('dry') !== '0';
   const sinceMs = Date.now() - Math.min(Number(p.get('days') || 365), 730) * 86400000;
-  let budget = 40;
+  let budget = 40, acted = 0;
   const get = async url => { budget--; const r = await fetch(url); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(JSON.stringify(j.error || r.status).slice(0, 300)); return j; };
   const out = { dry: isDry, done: [], skipped: 0, errors: [], next: null };
   const stores = await getStores(env, request);
@@ -584,14 +586,15 @@ async function igBackfill(env, request, p) {
         for (const c of cm.data || []) {
           if (!c.text || !c.text.trim() || own(c)) continue;
           if (((c.replies && c.replies.data) || []).some(own)) { out.skipped++; continue; }
-          if (await ctx.seen(c.id)) { out.skipped++; continue; }
           const d = await decide(ctx, { message: c.text, fromName: '', isReplyInThread: false });
           if (d.action === 'ignore') continue;
+          if (d.action === 'complaint' && await ctx.seen(c.id)) { out.skipped++; continue; }
           const who = c.username || (c.from && c.from.username) || '';
           const reply = d.action === 'stores' ? igShort(d.publicReply) : d.action === 'thanks' ? (who ? '@' + who + ' ' : '') + d.reply : '';
           out.done.push({ date: c.timestamp.slice(0, 10), from: who, text: c.text.slice(0, 100), action: d.action, reply });
           if (isDry) continue;
-          if (budget < 3) { out.errors.push('נעצר באמצע – להריץ שוב'); stop = true; url = null; break; }
+          if (budget < 3 || acted >= 10) { out.errors.push('נעצר באמצע – להריץ שוב'); stop = true; url = null; break; }
+          acted++;
           await ctx.markSeen(c.id);
           await new Promise(r => setTimeout(r, 2500));
           try {
@@ -811,7 +814,7 @@ function buildStoresReply(message, fromName, stores) {
     const list = uniqByAddress(stores.filter(s => s.region === city.region));
     if (list.length) return {
       kind: 'אזור', city: city.city,
-      publicReply: `${hi}ב${city.city} עצמה עוד אין לנו נקודת מכירה, אבל הכי קרוב אליכם 👇\n${list.slice(0, MAX_PUBLIC).map(lineWithCity).join('\n')}\n\nכל נקודות המכירה: ${STORES_PAGE}`,
+      publicReply: `${hi}ב${city.city} עצמה עוד אין לנו נקודת מכירה, אבל באזור ${city.region} תמצאו אותנו כאן 👇\n${list.slice(0, MAX_PUBLIC).map(lineWithCity).join('\n')}\n\nכל נקודות המכירה: ${STORES_PAGE}`,
       privateReply: `${hi}נקודות המכירה של קובה אליהו באזור ${city.region}:\n${list.slice(0, 25).map(lineWithCity).join('\n')}${list.length > 25 ? '\n...' : ''}\n\nהרשימה המלאה עם ניווט: ${STORES_PAGE}`,
     };
   }
