@@ -76,6 +76,8 @@ export async function onRequestGet({ request, env: rawEnv }) {
       catch (e) { return json({ ok: false, error: e.message }); }
     }
     if (view === 'backfill') return backfill(env, request, p);
+    if (view === 'cleanup') return cleanupBlessings(env, p);
+    if (view === 'igbackfill') return igBackfill(env, request, p);
     if (view === 'setup') return setupPage(p.get('key'), '');
     if (view === 'check') {
       // בדיקת חיבור לפייסבוק – בלי לחשוף את הקוד עצמו
@@ -542,6 +544,112 @@ ${out.continueUrl ? `<meta http-equiv="refresh" content="1;url=${out.continueUrl
 ${out.errors.length ? `<p style="color:#b42318">שגיאות: ${esc2(out.errors.join(' | '))}</p>` : ''}
 <table border="1" cellpadding="6" style="border-collapse:collapse;width:100%"><tr><th>תאריך</th><th>מי</th><th>תגובה</th><th>מה הבוט עשה</th></tr>${rows}</table></body></html>`;
   return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+}
+
+/* ---------------------------------------------------------------------
+   אינסטגרם – מענה לתגובות מהעבר: /webhook?key=...&view=igbackfill&days=365&dry=1
+--------------------------------------------------------------------- */
+async function igBackfill(env, request, p) {
+  const G = `${env.GRAPH_BASE || 'https://graph.facebook.com'}/${GRAPH_VERSION}`;
+  const tok = encodeURIComponent(String(env.PAGE_ACCESS_TOKEN || '').trim());
+  const isDry = p.get('dry') !== '0';
+  const sinceMs = Date.now() - Math.min(Number(p.get('days') || 365), 730) * 86400000;
+  let budget = 40;
+  const get = async url => { budget--; const r = await fetch(url); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(JSON.stringify(j.error || r.status).slice(0, 300)); return j; };
+  const out = { dry: isDry, done: [], skipped: 0, errors: [], next: null };
+  const stores = await getStores(env, request);
+  const ctx = makeCtx({ ...env, DRY_RUN: isDry ? 'true' : 'false' }, stores);
+  try {
+    const pg = await get(`${G}/${env.PAGE_ID}?fields=instagram_business_account{id,username}&access_token=${tok}`);
+    const ig = pg.instagram_business_account; if (!ig) throw new Error('אין חשבון אינסטגרם מחובר לדף');
+    const own = r => r && ((r.from && r.from.id === ig.id) || (r.username || '').toLowerCase() === ig.username.toLowerCase());
+    let url = `${G}/${ig.id}/media?fields=id,timestamp&limit=20&access_token=${tok}`;
+    const nx = p.get('next');
+    if (nx && /^[A-Za-z0-9_\-=]+$/.test(nx)) url += `&after=${nx}`;
+    let stop = false;
+    while (url && budget > 8 && !stop) {
+      const media = await get(url);
+      const after = media.paging && media.paging.cursors && media.paging.cursors.after;
+      url = (media.paging && media.paging.next) ? `${G}/${ig.id}/media?fields=id,timestamp&limit=20&access_token=${tok}&after=${after}` : null;
+      for (const m of media.data || []) {
+        if (Date.parse(m.timestamp) < sinceMs) { stop = true; url = null; break; }
+        if (budget < 6) { out.errors.push('נעצר באמצע – להריץ שוב'); stop = true; url = null; break; }
+        const cm = await get(`${G}/${m.id}/comments?fields=id,text,timestamp,username,from{id,username},replies{id,username,from{id}}&limit=50&access_token=${tok}`);
+        for (const c of cm.data || []) {
+          if (!c.text || !c.text.trim() || own(c)) continue;
+          if (((c.replies && c.replies.data) || []).some(own)) { out.skipped++; continue; }
+          if (await ctx.seen(c.id)) { out.skipped++; continue; }
+          const d = await decide(ctx, { message: c.text, fromName: '', isReplyInThread: false });
+          if (d.action === 'ignore') continue;
+          const who = c.username || (c.from && c.from.username) || '';
+          const reply = d.action === 'stores' ? igShort(d.publicReply) : d.action === 'thanks' ? (who ? '@' + who + ' ' : '') + d.reply : '';
+          out.done.push({ date: c.timestamp.slice(0, 10), from: who, text: c.text.slice(0, 100), action: d.action, reply });
+          if (isDry) continue;
+          if (budget < 3) { out.errors.push('נעצר באמצע – להריץ שוב'); stop = true; url = null; break; }
+          await ctx.markSeen(c.id);
+          try {
+            if (d.action === 'stores' || d.action === 'thanks') { budget--; await ctx.igReply(c.id, reply); }
+            else if (d.action === 'complaint') {
+              const rec = { id: c.id, postId: m.id, message: c.text, fromName: '@' + who + ' (אינסטגרם)', fromId: '', health: d.health, time: Date.parse(c.timestamp), action: 'הוסתרה (אינסטגרם, מהעבר)' };
+              if (env.BOT_KV) await env.BOT_KV.put(`complaint:${new Date(rec.time).toISOString()}:${c.id}`, JSON.stringify(rec));
+              budget--; await ctx.igHide(c.id);
+            }
+            await ctx.log(`🕘 אינסטגרם מהעבר (${c.timestamp.slice(0, 10)}) ${d.action === 'stores' ? '📍' : d.action === 'thanks' ? '💛' : '⚠️'} @${who}: "${c.text.slice(0, 60)}"`);
+          } catch (e) { out.errors.push(`${c.id}: ${e.message}`); }
+        }
+        if (stop) break;
+      }
+      if (url && budget <= 8) { out.next = after; url = null; }
+    }
+  } catch (e) { out.errors.push(e.message); }
+  await ctx.flushLog();
+  if (out.next) out.continueUrl = `/webhook?key=${p.get('key')}&view=igbackfill&days=${p.get('days') || 365}&dry=${isDry ? 1 : 0}&next=${out.next}`;
+  return json(out);
+}
+
+/* ---------------------------------------------------------------------
+   ניקוי: מוחק תשובות של הבוט שנכתבו מתחת לתגובות ברכה/ניחומים
+   /webhook?key=...&view=cleanup&dry=1  (dry=0 למחיקה בפועל)
+--------------------------------------------------------------------- */
+async function cleanupBlessings(env, p) {
+  const G = `${env.GRAPH_BASE || 'https://graph.facebook.com'}/${GRAPH_VERSION}`;
+  const tok = encodeURIComponent(String(env.PAGE_ACCESS_TOKEN || '').trim());
+  const isDry = p.get('dry') !== '0';
+  const since = Math.floor(Date.now() / 1000) - Math.min(Number(p.get('days') || 365), 730) * 86400;
+  const botFrom = Date.parse(p.get('from') || '2026-11-23T00:00:00Z');   // רק תשובות שהבוט כתב
+  let budget = 45;
+  const get = async url => { budget--; const r = await fetch(url); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(JSON.stringify(j.error || r.status).slice(0, 300)); return j; };
+  const out = { dry: isDry, found: [], deleted: 0, errors: [], next: null };
+  let url = `${G}/${env.PAGE_ID}/posts?fields=id&since=${since}&limit=25&access_token=${tok}`;
+  const nx = p.get('next');
+  if (nx && nx.startsWith('https://graph.facebook.com/') && new RegExp('^/v\\d+\\.\\d+/' + env.PAGE_ID + '/posts$').test(new URL(nx).pathname)) url = nx.replace(/([?&])access_token=[^&]*&?/, '$1').replace(/[?&]$/, '') + '&access_token=' + tok;
+  try {
+    while (url && budget > 6) {
+      const posts = await get(url);
+      url = (posts.paging && posts.paging.next) || null;
+      for (const post of posts.data || []) {
+        if (budget < 4) { out.errors.push('נעצר באמצע – להריץ שוב'); url = null; break; }
+        const cm = await get(`${G}/${post.id}/comments?filter=toplevel&fields=id,message,comments.limit(50){id,from,message,created_time}&limit=100&access_token=${tok}`);
+        for (const c of cm.data || []) {
+          const t = norm(c.message || '');
+          if (!(BLESSING.test(t) || MEMORIAL.test(t))) continue;
+          for (const r of (c.comments && c.comments.data) || []) {
+            if (!isOwn(env, r.from)) continue;
+            if (Date.parse(r.created_time) < botFrom) continue;
+            if (!/^תודה רבה/.test((r.message || '').trim()) || (r.message || '').length > 45) continue;
+            out.found.push({ comment: (c.message || '').slice(0, 70), reply: r.message });
+            if (isDry) continue;
+            if (budget < 2) { out.errors.push('נעצר באמצע – להריץ שוב'); break; }
+            try { budget--; const d = await fetch(`${G}/${r.id}?access_token=${tok}`, { method: 'DELETE' }); if (!d.ok) throw new Error((await d.text()).slice(0, 200)); out.deleted++; }
+            catch (e) { out.errors.push(e.message); }
+          }
+        }
+      }
+    }
+    if (url) out.next = url.replace(/([?&])access_token=[^&]*&?/, '$1').replace(/[?&]$/, '');
+  } catch (e) { out.errors.push(e.message); }
+  if (out.next) out.continueUrl = `/webhook?key=${p.get('key')}&view=cleanup&dry=${isDry ? 1 : 0}&next=${encodeURIComponent(out.next)}`;
+  return json(out);
 }
 
 /* ---------------------------------------------------------------------
